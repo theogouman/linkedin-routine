@@ -8,6 +8,7 @@ Le principe tient en un mot : **inbox**. Une file finie, ordonnée, qu'on vide �
 pas un flux infini qu'on parcourt.
 
 - **Spécification** : [`specs/001-linkedin-engagement-inbox/spec.md`](specs/001-linkedin-engagement-inbox/spec.md)
+- **Variables d'environnement** : [`docs/VARIABLES-ENV.md`](docs/VARIABLES-ENV.md)
 - **Déploiement** : [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md)
 - **Architecture** : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
@@ -25,10 +26,13 @@ pas un flux infini qu'on parcourt.
 
 ```bash
 npm install
-cp .env.example .env.local        # puis renseigner les variables
-node scripts/hash-password.mjs "ton mot de passe"   # → APP_PASSWORD_HASH
+cp .env.example .env.local
+node scripts/generate-secrets.mjs "ton mot de passe"   # → 4 variables sur 12
 npm run dev
 ```
+
+Les huit variables restantes viennent de comptes tiers : pas à pas dans
+[`docs/VARIABLES-ENV.md`](docs/VARIABLES-ENV.md).
 
 Pour développer sans compte Apify ni compte Unipile — donc sans budget et sans
 risque d'envoyer un vrai commentaire :

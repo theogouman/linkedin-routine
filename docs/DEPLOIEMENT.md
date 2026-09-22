@@ -1,5 +1,9 @@
 # Déploiement
 
+> Pour l'origine et la génération de chaque variable, voir
+> [`VARIABLES-ENV.md`](VARIABLES-ENV.md). Ce document-ci donne l'ordre des
+> opérations.
+
 Ordre imposé : la base avant l'app, les fournisseurs avant le premier
 lancement. Une variable manquante ne dégrade pas l'app en silence — elle la
 bloque avec un message qui nomme la variable.
@@ -69,9 +73,11 @@ La clé publique va dans **deux** variables : `VAPID_PUBLIC_KEY` (serveur) et
 ## 6. Authentification
 
 ```bash
-node scripts/hash-password.mjs "ton mot de passe"   # → APP_PASSWORD_HASH
-openssl rand -base64 32                             # → SESSION_SECRET
+node scripts/generate-secrets.mjs "ton mot de passe"
 ```
+
+Génère d'un coup `APP_PASSWORD_HASH`, `SESSION_SECRET`, `CRON_SECRET` et la
+paire VAPID.
 
 Sans `SESSION_SECRET`, le middleware refuse **toute** navigation : une variable
 oubliée au déploiement ne doit pas ouvrir l'app.
