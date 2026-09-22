@@ -1,0 +1,645 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Design system — repris à l'identique de la plateforme Notion Club
+   (dépôt de référence Notion-Club/Infrastructure, cf. FR-024).
+
+   Les valeurs de couleur, de rayon, d'ombre et d'easing ne sont PAS à
+   réinventer ici : elles viennent du design system et toute divergence se
+   verrait immédiatement à côté de l'autre produit. Les composants issus des
+   bibliothèques externes (transitions.dev) sont thémés avec ces tokens ;
+   elles fournissent la structure et le mouvement, jamais la DA.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+html {
+  scroll-behavior: smooth;
+  /* Fond du canvas révélé par l'overscroll iOS : la MÊME surface unie que
+     celle vers laquelle le dégradé fond, donc aucune cassure visible. */
+  background-color: var(--color-surface-page);
+}
+
+::selection {
+  background: rgba(224, 98, 90, 0.24);
+  color: inherit;
+}
+::-moz-selection {
+  background: rgba(224, 98, 90, 0.24);
+  color: inherit;
+}
+
+/* En PWA installée, html/body passent en user-select:none (comportement
+   d'app native). Le texte des posts doit rester sélectionnable : on repose
+   les DEUX propriétés, préfixée comprise, sinon iOS garde l'héritage. */
+.nc-selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+
+  /* ── Tokens NC — mode sombre (near-black chaud, jamais le noir pur) ── */
+  --color-brand: #e0625a;
+  --color-text-primary: #f2edeb;
+  --color-text-secondary: #a89e9b;
+  --color-text-muted: #857a77;
+  --color-surface-page: #141211;
+  --color-surface-raised: #201d1b;
+  --color-surface-card: #2a2725;
+  --color-border-default: #332e2b;
+  --nc-nav-active-bg: rgba(255, 255, 255, 0.09);
+  --nc-nav-hover-bg: rgba(255, 255, 255, 0.05);
+  --nc-segmented-active-bg: rgba(255, 255, 255, 0.92);
+  --nc-segmented-active-text: #141211;
+  --nc-btn-dark-bg: #ede9e6;
+  --nc-btn-dark-text: #141211;
+  --nc-bottom-nav-bg: #1c1917;
+  --nc-bottom-nav-border: rgba(55, 50, 47, 0.9);
+  --nc-glass-bg: rgba(32, 29, 27, 0.6);
+  --nc-glass-border: rgba(255, 255, 255, 0.08);
+  --nc-switch-off-bg: rgba(255, 255, 255, 0.16);
+  --nc-btn-disabled-bg: #2a2725;
+  --nc-btn-disabled-text: #6b6360;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-sf-pro-display);
+
+  /* Tokens de marque Notion Club — mode clair */
+  --color-brand: #e0625a;
+  --color-text-primary: #000000;
+  --color-text-secondary: #52525b;
+  --color-text-muted: #64748b;
+  --color-surface-page: #f5f2f2;
+  --color-surface-raised: #f5f5f5;
+  --color-border-default: #e5e7eb;
+  --color-surface-card: #ffffff;
+}
+
+:root {
+  --nc-radius-xs: 12px;
+  --nc-radius-sm: 16px;
+  --nc-radius-md: 24px;
+  --nc-radius-xl: 100px;
+  --nc-radius-2xl: 9999px;
+  --nc-shadow-2: rgba(0, 0, 0, 0.03) 0 -2px 16px -4px,
+    rgba(0, 0, 0, 0.08) 0 16px 40px -8px, rgba(0, 0, 0, 0.04) 0 1px 3px 0;
+  --nc-shadow-3: rgba(0, 0, 0, 0.06) 0 4px 24px 0, rgba(0, 0, 0, 0.04) 0 1px 2px 0;
+  --nc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --nc-duration-xfast: 150ms;
+  --nc-duration-fast: 200ms;
+  --nc-duration-normal: 250ms;
+  --nc-duration-slow: 300ms;
+  --nc-nav-active-bg: rgba(0, 0, 0, 0.07);
+  --nc-nav-hover-bg: rgba(0, 0, 0, 0.04);
+  --nc-segmented-active-bg: #ffffff;
+  --nc-segmented-active-text: #000000;
+  --nc-tile-bg: var(--color-surface-page);
+  --nc-glass-bg: rgba(255, 255, 255, 0.55);
+  --nc-glass-border: rgba(255, 255, 255, 0.65);
+  --nc-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --nc-btn-dark-bg: #1a1a1a;
+  --nc-btn-dark-text: #ffffff;
+  --nc-bottom-nav-bg: #ffffff;
+  --nc-bottom-nav-border: rgba(229, 231, 235, 0.9);
+  --nc-switch-off-bg: rgba(0, 0, 0, 0.12);
+  --nc-btn-disabled-bg: #e5e7eb;
+  --nc-btn-disabled-text: #9ca3af;
+  --nc-status-upcoming-bg: #fef3f2;
+  --nc-status-upcoming-text: #e0625a;
+  --nc-status-accepted-bg: #dcfce7;
+  --nc-status-accepted-text: #166534;
+  --nc-status-noshown-bg: #fee2e2;
+  --nc-status-noshown-text: #991b1b;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border-default);
+  }
+  body {
+    color: var(--color-text-primary);
+    background-color: transparent;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+  }
+  button, input, textarea, select {
+    font: inherit;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Fond de marque global — un seul calque fixe, monté une fois dans le layout
+   racine. Deux taches latérales centrées verticalement : le haut et le bas
+   restent en surface unie, donc le dégradé rejoint sans cassure les bandes
+   Safari et le canvas d'overscroll.
+   ══════════════════════════════════════════════════════════════════════════ */
+.nc-app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(56% 50% at -8% 50%, rgba(224, 99, 90, 0.28) 0%, transparent 72%),
+    radial-gradient(56% 50% at 108% 50%, rgba(224, 99, 90, 0.26) 0%, transparent 72%),
+    var(--color-surface-page);
+}
+.dark .nc-app-bg {
+  background: var(--color-surface-page);
+}
+
+/* Compense l'encoche en PWA standalone : sans ce padding, tout le contenu
+   remonte sous l'heure iOS. Hors standalone, env() vaut 0 → sans effet. */
+.nc-page {
+  position: relative;
+  isolation: isolate;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* ── Surfaces ───────────────────────────────────────────────────────────── */
+.nc-card {
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--nc-radius-sm);
+  box-shadow: var(--nc-shadow-3);
+}
+.dark .nc-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.nc-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--nc-radius-xs);
+  /* 16px minimum : en dessous, iOS zoome au focus et casse la mise en page. */
+  font-size: 16px;
+  background: #ffffff;
+  color: var(--color-text-primary);
+  transition: border-color var(--nc-duration-fast) ease,
+    box-shadow var(--nc-duration-fast) ease;
+}
+.nc-input::placeholder { color: var(--color-text-muted); }
+.nc-input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(224, 98, 90, 0.12);
+}
+.dark .nc-input {
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.dark .nc-input::placeholder { color: var(--color-text-muted); }
+.dark .nc-input:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(224, 98, 90, 0.15);
+}
+
+/* ── Boutons ────────────────────────────────────────────────────────────── */
+.nc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: var(--nc-radius-2xl);
+  border: 1px solid transparent;
+  font-weight: 500;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--nc-duration-xfast) ease,
+    border-color var(--nc-duration-xfast) ease,
+    transform var(--nc-duration-xfast) var(--nc-ease),
+    opacity var(--nc-duration-xfast) ease;
+}
+.nc-btn:active:not(:disabled) { transform: scale(0.97); }
+.nc-btn:disabled {
+  background: var(--nc-btn-disabled-bg);
+  color: var(--nc-btn-disabled-text);
+  cursor: not-allowed;
+}
+
+.nc-btn--primary {
+  background: var(--nc-btn-dark-bg);
+  color: var(--nc-btn-dark-text);
+}
+.nc-btn--brand {
+  background: var(--color-brand);
+  color: #ffffff;
+}
+.nc-btn--brand:hover:not(:disabled) { background: #d4564e; }
+.nc-btn--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-default);
+}
+.nc-btn--ghost:hover:not(:disabled) { background: var(--nc-nav-hover-bg); }
+.nc-btn--sm { height: 36px; padding: 0 14px; font-size: 14px; }
+
+.nc-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-card);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--nc-duration-xfast) ease,
+    color var(--nc-duration-xfast) ease, transform var(--nc-duration-xfast) var(--nc-ease);
+}
+.nc-icon-btn:active { transform: scale(0.92); }
+.nc-icon-btn[data-active="true"] {
+  color: var(--color-brand);
+  border-color: rgba(224, 98, 90, 0.4);
+  background: rgba(224, 98, 90, 0.08);
+}
+.dark .nc-icon-btn { border-color: rgba(255, 255, 255, 0.12); }
+
+/* ── Badges d'état ──────────────────────────────────────────────────────── */
+.nc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.nc-badge--neutral {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-text-secondary);
+}
+.dark .nc-badge--neutral { background: rgba(255, 255, 255, 0.08); }
+.nc-badge--brand {
+  background: var(--nc-status-upcoming-bg);
+  color: var(--nc-status-upcoming-text);
+}
+.dark .nc-badge--brand { background: rgba(224, 98, 90, 0.16); }
+.nc-badge--ok {
+  background: var(--nc-status-accepted-bg);
+  color: var(--nc-status-accepted-text);
+}
+.dark .nc-badge--ok { background: rgba(22, 101, 52, 0.22); color: #86efac; }
+.nc-badge--alert {
+  background: var(--nc-status-noshown-bg);
+  color: var(--nc-status-noshown-text);
+}
+.dark .nc-badge--alert { background: rgba(153, 27, 27, 0.25); color: #fca5a5; }
+
+/* ── Barre de navigation basse ──────────────────────────────────────────── */
+.nc-bottom-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 9999px;
+  background: var(--nc-bottom-nav-bg);
+  border: 1px solid var(--nc-bottom-nav-border);
+  box-shadow: var(--nc-shadow-2);
+  transition: transform 240ms var(--nc-ease), opacity 200ms ease;
+}
+/* Après la première ouverture du clavier, WebKit contracte le viewport en PWA
+   et ne le restaure pas : 100lvh − 100dvh vaut alors la dérive exacte. On la
+   retranche pour que la barre reste collée au bord réel de l'écran. */
+@media (display-mode: standalone) {
+  .nc-bottom-nav {
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px) - (100lvh - 100dvh));
+  }
+}
+body.nc-kb-open .nc-bottom-nav {
+  transform: translateX(-50%)
+    translateY(calc(100% + 10px + env(safe-area-inset-bottom, 0px) + 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-bottom-nav { transition: opacity 200ms ease; }
+}
+
+.nc-nav-item {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 66px;
+  padding: 7px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: color var(--nc-duration-fast) var(--nc-ease);
+}
+.nc-nav-item[data-active="true"] { color: var(--color-text-primary); }
+.nc-nav-pill {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  height: calc(100% - 12px);
+  width: 0;
+  border-radius: 9999px;
+  background: var(--nc-nav-active-bg);
+  z-index: 0;
+  transition: transform 220ms var(--nc-ease), width 220ms var(--nc-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-nav-pill { transition: none !important; }
+}
+
+.nc-nav-count {
+  position: absolute;
+  top: 2px;
+  right: 10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  background: var(--color-brand);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Entrées de contenu ─────────────────────────────────────────────────── */
+@keyframes nc-mode-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.nc-content-enter {
+  animation: nc-mode-in var(--nc-duration-normal) var(--nc-ease) both;
+  animation-delay: calc(var(--nc-enter-i, 0) * 60ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-content-enter { animation: none; }
+}
+
+@keyframes nc-blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(224, 98, 90, 0.6); }
+  50% { opacity: 0.4; box-shadow: 0 0 0 5px rgba(224, 98, 90, 0); }
+}
+.nc-blink-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-brand);
+  animation: nc-blink 1.4s ease-in-out infinite;
+  display: inline-block;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-blink-dot { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   transitions.dev — snippets repris verbatim, thémés avec les tokens NC.
+   Les bibliothèques fournissent la structure et le mouvement ; les couleurs
+   viennent du design system. Chaque bloc conserve son garde
+   prefers-reduced-motion.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tabs-text-muted: var(--color-text-secondary);
+  --tabs-text-active: var(--color-text-primary);
+  --tabs-bar-bg: var(--color-surface-raised);
+  --tabs-pill-bg: var(--nc-segmented-active-bg);
+
+  --pulse-dur: 1000ms;
+  --pulse-min: 0.5;
+  --reveal-dur: 400ms;
+  --reveal-blur: 2px;
+  --reveal-ease: ease-in-out;
+
+  --shimmer-dur: 2000ms;
+  --shimmer-base: var(--color-text-muted);
+  --shimmer-highlight: var(--color-text-primary);
+  --shimmer-band: 400%;
+  --shimmer-ease: linear;
+}
+
+.t-modal {
+  transform-origin: center;
+  transform: scale(var(--modal-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--modal-open-dur) var(--modal-ease),
+    opacity var(--modal-open-dur) var(--modal-ease);
+  will-change: transform, opacity;
+}
+.t-modal.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.t-modal.is-closing {
+  transform: scale(var(--modal-scale-close));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--modal-close-dur) var(--modal-ease),
+    opacity var(--modal-close-dur) var(--modal-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-modal { transition: none !important; }
+}
+
+.t-tabs {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 48px;
+  background: var(--tabs-bar-bg);
+}
+.t-tab {
+  position: relative;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  height: 30px;
+  padding: 4px 12px;
+  color: var(--tabs-text-muted);
+  cursor: pointer;
+  border-radius: 48px;
+  z-index: 1;
+  white-space: nowrap;
+  transition: color var(--tabs-dur) var(--tabs-ease);
+}
+.t-tab:not([aria-selected="true"]):hover,
+.t-tab[aria-selected="true"] {
+  color: var(--tabs-text-active);
+}
+.t-tab[aria-selected="true"] { color: var(--nc-segmented-active-text); }
+.t-tabs-pill {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 30px;
+  width: 0;
+  border-radius: 48px;
+  background: var(--tabs-pill-bg);
+  z-index: 0;
+  transition:
+    transform var(--tabs-dur) var(--tabs-ease),
+    width var(--tabs-dur) var(--tabs-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-tabs-pill { transition: none !important; }
+}
+
+.t-skel { position: relative; }
+.t-skel-skeleton.is-pulsing > * {
+  animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite;
+}
+@keyframes t-skel-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: var(--pulse-min); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-skel-skeleton.is-pulsing > * { animation: none !important; }
+}
+.nc-skel-bar {
+  background: var(--color-surface-raised);
+  border-radius: 8px;
+  height: 12px;
+}
+.dark .nc-skel-bar { background: rgba(255, 255, 255, 0.06); }
+
+.t-shimmer {
+  position: relative;
+  display: inline-block;
+  color: var(--shimmer-base);
+}
+.t-shimmer::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 40%,
+    var(--shimmer-highlight) 50%,
+    transparent 60%,
+    transparent 100%
+  );
+  background-size: var(--shimmer-band) 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
+}
+@keyframes t-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-shimmer::before { animation: none !important; }
+}
+
+/* ── Divers ─────────────────────────────────────────────────────────────── */
+.nc-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.nc-scroll-x::-webkit-scrollbar { display: none; }
+
+.nc-clamp-6 {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
