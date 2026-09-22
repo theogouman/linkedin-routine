@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-22
 
-**Status**: Draft
+**Status**: Implémentée — cf. `docs/ARCHITECTURE.md`
 
 **Input**: User description: "Application mobile-first (PWA iOS) qui remplace le fil natif LinkedIn pour deux routines d'engagement quotidiennes : commenter les publications d'une liste curée de créateurs, et répondre aux commentaires reçus sur ses propres posts. Listes de comptes curées, fil non algorithmique, commentaire depuis l'app, génération IA selon un process fourni, traitement en mode inbox."
 
@@ -230,7 +230,7 @@ L'utilisateur consulte l'historique de tout ce qui est parti depuis l'app : comm
 
 **Récupération**
 
-- **FR-003** : La récupération des publications MUST être incrémentale : à chaque actualisation, le système ne récupère que les contenus publiés depuis la date de la dernière actualisation (curseur horodaté), jamais une fenêtre fixe. Tout contenu récupéré MUST être conservé en base de façon permanente. L'actualisation MUST être déclenchée à l'ouverture de l'app et par un bouton manuel, sans aucune synchronisation périodique en arrière-plan hormis la vérification de FR-014. [NEEDS CLARIFICATION : à l'ajout d'un compte n'ayant jamais été suivi, quelle profondeur d'historique récupérer au premier passage — rien avant l'ajout, les N derniers jours, les N dernières publications ? Impact direct sur le coût de récupération à l'échelle de 100+ comptes.]
+- **FR-003** : La récupération des publications MUST être incrémentale : à chaque actualisation, le système ne récupère que les contenus publiés depuis la date de la dernière actualisation (curseur horodaté), jamais une fenêtre fixe. Tout contenu récupéré MUST être conservé en base de façon permanente. L'actualisation MUST être déclenchée à l'ouverture de l'app et par un bouton manuel, sans aucune synchronisation périodique en arrière-plan hormis la vérification de FR-014. À l'ajout d'un compte jamais suivi, le premier passage MUST remonter les **7 derniers jours** (paramétrable, `INITIAL_BACKFILL_DAYS`) : assez pour que le fil ne soit pas vide à l'ajout, assez court pour que l'amorçage de 100+ comptes reste marginal en coût. Après une longue absence, la profondeur demandée MUST être plafonnée (`MAX_LOOKBACK_DAYS`, 90 jours par défaut) et la troncature MUST être signalée.
 - **FR-008** : Le système MUST récupérer les commentaires reçus sur les publications de l'utilisateur des 30 derniers jours (fenêtre glissante), de manière incrémentale selon les mêmes règles que FR-003, à tous les niveaux d'imbrication (réponses aux réponses incluses), et les présenter en file de traitement.
 - **FR-020** : Le système MUST rendre la couche de récupération interchangeable derrière une interface unique, de sorte qu'un fournisseur défaillant ou disparu puisse être remplacé sans modification du reste de l'application.
 - **FR-021** : Le système MUST ne jamais utiliser le compte LinkedIn de l'utilisateur pour la récupération de contenu ; la lecture et l'écriture MUST rester strictement séparées.
@@ -251,7 +251,7 @@ L'utilisateur consulte l'historique de tout ce qui est parti depuis l'app : comm
 **Génération IA**
 
 - **FR-006** : Chaque publication MUST proposer un bouton « Générer un commentaire » produisant une proposition insérée dans le champ de saisie, éditable avant publication. Aucun commentaire MUST être publié sans validation manuelle.
-- **FR-007** : Le système MUST charger deux process de génération distincts — un pour le commentaire sur un post d'autrui, un pour la réponse à un commentaire reçu — définis chacun dans un fichier `.md` versionné dans le dépôt (ton, structure, règles, exemples). Les deux fichiers MUST être créés en placeholder au build. [NEEDS CLARIFICATION : contenu rédactionnel des deux process — à fournir par l'utilisateur ; non bloquant pour le plan technique, les placeholders suffisent au build.]
+- **FR-007** : Le système MUST charger deux process de génération distincts — un pour le commentaire sur un post d'autrui, un pour la réponse à un commentaire reçu — définis chacun dans un fichier `.md` versionné dans le dépôt (ton, structure, règles, exemples). Les deux fichiers MUST être créés en placeholder au build, et l'app MUST signaler visuellement qu'un process n'a pas encore été rédigé — dans les réglages et au moment de chaque génération. Le contenu rédactionnel reste à fournir par l'utilisateur ; il n'est pas bloquant, le chargeur relit les fichiers à chaque génération.
 - **FR-019** : La génération IA MUST utiliser une clé d'API dédiée pour un modèle configurable. Le jeton d'abonnement Claude (OAuth Claude Code / claude.ai) MUST NOT être utilisé : son emploi hors des applications officielles viole les conditions d'utilisation d'Anthropic et exposerait le compte.
 
 **Traitement & traçabilité**
@@ -327,9 +327,26 @@ L'utilisateur consulte l'historique de tout ce qui est parti depuis l'app : comm
 - Multi-comptes et multi-utilisateurs.
 - Suivi des réponses reçues sur ses propres commentaires postés chez les créateurs.
 
-## Points à clarifier avant le plan technique
+## Points clarifiés
 
-À résoudre via `/speckit-clarify` :
+1. **Profondeur de la première récupération** (FR-003) — *tranché* : 7 jours,
+   paramétrable, avec plafond de rattrapage à 90 jours. À 100 comptes, l'amorçage
+   coûte une poignée de dollars une seule fois, et le fil n'est pas vide au premier
+   lancement.
+2. **Contenu rédactionnel des deux process IA** (FR-007) — *ouvert, non bloquant* :
+   les placeholders sont livrés, l'app signale qu'ils ne sont pas rédigés, et les
+   remplacer ne demande ni redéploiement ni changement de code.
 
-1. **Profondeur de la première récupération** pour un compte nouvellement ajouté (FR-003) — impact direct sur le coût à l'échelle de 100+ comptes.
-2. **Contenu rédactionnel des deux process IA** (FR-007) — à rédiger par l'utilisateur ; non bloquant, les placeholders suffisent au build.
+## Écarts assumés entre la spec et l'implémentation
+
+- **FR-017 — les plafonds et la cadence sont arithmétiquement incompatibles à
+  leur maximum.** 90 actions par jour à un délai moyen de 7,5 minutes
+  demanderaient ~11 h d'émission, pour ~9,5 h de fenêtre ouverte (8 h-19 h moins
+  le creux méridien). L'implémentation fait gagner la cadence — c'est elle qui
+  protège le compte — et reporte le surplus au jour suivant. Les plafonds sont
+  donc des maxima, jamais des objectifs. Les deux jeux de valeurs sont
+  paramétrables ; baisser le délai ou les plafonds de likes lève la tension.
+- **Un like ne fait pas passer un élément en traité.** FR-010 nomme trois
+  déclencheurs (commentaire publié, réponse envoyée, marquage manuel) ; le like
+  n'en fait pas partie. L'implémentation s'y tient : liker puis commenter reste
+  une séquence valide.

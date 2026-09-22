@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,16 +31,18 @@
 
 ## Notes
 
-- **« No implementation details » — validé avec réserve assumée.** Le brief source impose trois contraintes externes
-  qui nomment des technologies : la séparation lecture/écriture via fournisseurs tiers, l'interdiction du jeton
-  d'abonnement Claude (FR-019), et la reprise de la direction artistique Notion Club avec quatre bibliothèques UI
-  nommées (FR-024). Elles sont conservées parce qu'elles bornent le plan plutôt qu'elles ne l'anticipent, et sont
-  isolées dans la section « Contraintes & Dépendances externes » afin que les exigences fonctionnelles restent
-  formulées en termes de résultat observable. Les scénarios d'acceptation n'en dépendent pas.
-- **2 marqueurs [NEEDS CLARIFICATION] subsistent volontairement** (voir « Points à clarifier avant le plan
-  technique ») :
-  1. FR-003 — profondeur de la première récupération pour un compte nouvellement ajouté. Bloquant pour le plan :
-     détermine le coût à l'échelle de 100+ comptes.
-  2. FR-007 — contenu rédactionnel des deux process IA. Non bloquant : l'utilisateur l'a lui-même qualifié ainsi,
-     les placeholders suffisent au build.
-- La spec est prête pour `/speckit-clarify`. Le point 1 devrait être tranché avant `/speckit-plan`.
+- **« No implementation details » — validé avec réserve assumée.** Le brief source impose trois contraintes
+  externes qui nomment des technologies : la séparation lecture/écriture via fournisseurs tiers, l'interdiction
+  du jeton d'abonnement Claude (FR-019), et la reprise de la direction artistique Notion Club avec quatre
+  bibliothèques UI nommées (FR-024). Elles sont conservées parce qu'elles bornent le plan plutôt qu'elles ne
+  l'anticipent, et sont isolées dans la section « Contraintes & Dépendances externes » afin que les exigences
+  fonctionnelles restent formulées en termes de résultat observable. Les scénarios d'acceptation n'en dépendent
+  pas.
+- **Les deux marqueurs [NEEDS CLARIFICATION] sont levés.**
+  1. FR-003 — profondeur de la première récupération : tranchée à 7 jours, paramétrable, avec plafond de
+     rattrapage à 90 jours.
+  2. FR-007 — contenu des process IA : reste à rédiger par l'utilisateur, mais n'est plus une question ouverte
+     pour la spec — les placeholders sont livrés et l'app signale leur état.
+- **Deux écarts assumés** sont documentés dans la spec plutôt que masqués : la tension arithmétique entre les
+  plafonds et la cadence de FR-017, et le fait qu'un like ne fasse pas passer un élément en traité.
+- La spec est implémentée. La revue de conformité se fait contre `docs/ARCHITECTURE.md` et la suite de tests.
