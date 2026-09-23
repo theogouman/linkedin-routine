@@ -4,15 +4,72 @@ Douze variables obligatoires, sept optionnelles. Quatre se génèrent en une
 commande, huit se récupèrent sur des comptes tiers, le reste a des valeurs par
 défaut qui conviennent.
 
-**Raccourci — les quatre générables d'un coup :**
+## Raccourci — les quatre générables d'un coup
+
+### Si tu as le dépôt en local
 
 ```bash
+git clone https://github.com/theogouman/linkedin-routine.git
+cd linkedin-routine
+npm install
 node scripts/generate-secrets.mjs "ton mot de passe"
 ```
 
 La sortie est un bloc `.env` complet : les quatre valeurs remplies, les huit
-autres en attente avec l'endroit exact où les prendre. Rien n'est écrit sur
-disque, le mot de passe en clair n'est stocké nulle part.
+autres en attente avec l'endroit exact où les prendre.
+
+### Sans rien cloner — commandes autonomes
+
+Copie ce bloc entier dans ton terminal, après avoir remplacé le mot de passe
+de la première ligne. Il ne dépend que de `node` et d'`openssl`, tous deux
+déjà présents sur macOS.
+
+```bash
+PASS='ton mot de passe'
+
+{
+node -e '
+const {webcrypto}=require("node:crypto"); const c=globalThis.crypto||webcrypto;
+const I=310000, s=c.getRandomValues(new Uint8Array(16));
+c.subtle.importKey("raw",new TextEncoder().encode(process.argv[1]),"PBKDF2",false,["deriveBits"])
+ .then(k=>c.subtle.deriveBits({name:"PBKDF2",salt:s,iterations:I,hash:"SHA-256"},k,256))
+ .then(b=>console.log(`APP_PASSWORD_HASH=pbkdf2$${I}$${Buffer.from(s).toString("base64")}$${Buffer.from(b).toString("base64")}`));
+' "$PASS"
+echo "SESSION_SECRET=$(openssl rand -base64 32)"
+echo "CRON_SECRET=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+npx --yes web-push generate-vapid-keys --json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const v=JSON.parse(d);console.log(`NEXT_PUBLIC_VAPID_PUBLIC_KEY=${v.publicKey}`);console.log(`VAPID_PUBLIC_KEY=${v.publicKey}`);console.log(`VAPID_PRIVATE_KEY=${v.privateKey}`)})'
+}
+```
+
+Sortie attendue, six lignes prêtes à coller :
+
+```
+APP_PASSWORD_HASH=pbkdf2$310000$…$…
+SESSION_SECRET=…
+CRON_SECRET=…
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=B…
+VAPID_PUBLIC_KEY=B…
+VAPID_PRIVATE_KEY=…
+```
+
+Accents, espaces et caractères spéciaux dans le mot de passe sont gérés —
+c'est testé (`scripts/oneliner.test.ts` vérifie que le condensat produit par
+cette commande authentifie réellement dans l'app). Seule exception : si ton
+mot de passe contient une **apostrophe**, remplace `PASS='…'` par
+`PASS="…"` et échappe les `$`, `` ` `` et `\` qu'il contiendrait.
+
+La ligne `PASS=` reste dans l'historique de ton shell. Pour l'en retirer :
+`history -d $(history 1)` en zsh, ou fais précéder la ligne d'un **espace**
+si `HIST_IGNORE_SPACE` est actif.
+
+### Chaque valeur séparément
+
+| Variable | Commande |
+|---|---|
+| `SESSION_SECRET` | `openssl rand -base64 32` |
+| `CRON_SECRET` | `openssl rand -base64 32 \| tr '+/' '-_' \| tr -d '='` |
+| paire VAPID | `npx --yes web-push generate-vapid-keys` |
+| `APP_PASSWORD_HASH` | le `node -e` du bloc ci-dessus |
 
 ---
 
@@ -37,9 +94,8 @@ disque, le mot de passe en clair n'est stocké nulle part.
 
 ### `APP_PASSWORD_HASH` — le mot de passe qui ouvre l'app
 
-```bash
-node scripts/hash-password.mjs "ton mot de passe"
-```
+Depuis le dépôt : `node scripts/hash-password.mjs "ton mot de passe"`.
+Sans le dépôt : le `node -e` du raccourci ci-dessus.
 
 Sortie : `APP_PASSWORD_HASH=pbkdf2$310000$<sel>$<clé>`.
 
