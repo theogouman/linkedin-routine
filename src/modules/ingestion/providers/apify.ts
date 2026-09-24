@@ -62,7 +62,17 @@ const RESTRICTED_ITEM_PATTERNS =
 export class ApifyIngestionProvider implements IngestionProvider {
   readonly name = "apify";
 
-  private readonly token: string;
+  /**
+   * Les identifiants sont résolus au PREMIER APPEL, pas à la construction.
+   *
+   * Construire un fournisseur n'est pas l'utiliser : l'ordonnanceur instancie
+   * la couche de récupération à chaque passage, y compris quand il n'y a aucun
+   * compte à interroger. Exiger le jeton dès le constructeur faisait échouer
+   * ces passages à vide tant que le compte n'était pas provisionné — une
+   * erreur toutes les cinq minutes pour un travail qui n'avait rien à faire.
+   */
+  private resolvedToken: string | null;
+  private readonly explicitToken: string | undefined;
   private readonly postsActor: string;
   private readonly commentsActor: string;
   private readonly profileActor: string | null;
@@ -70,7 +80,8 @@ export class ApifyIngestionProvider implements IngestionProvider {
   private readonly timeoutMs: number;
 
   constructor(options: ApifyProviderOptions = {}) {
-    this.token = options.token ?? requireEnv("APIFY_TOKEN");
+    this.explicitToken = options.token;
+    this.resolvedToken = options.token ?? null;
     this.postsActor =
       options.postsActor ?? readEnv("APIFY_POSTS_ACTOR") ?? DEFAULT_POSTS_ACTOR;
     this.commentsActor =
@@ -80,8 +91,15 @@ export class ApifyIngestionProvider implements IngestionProvider {
     this.timeoutMs = options.timeoutMs ?? 180_000;
   }
 
+  private token(): string {
+    if (this.resolvedToken === null) {
+      this.resolvedToken = this.explicitToken ?? requireEnv("APIFY_TOKEN");
+    }
+    return this.resolvedToken;
+  }
+
   private async runActor(actor: string, input: unknown): Promise<unknown[]> {
-    const url = `${APIFY_BASE}/acts/${encodeURIComponent(actor)}/run-sync-get-dataset-items?token=${encodeURIComponent(this.token)}`;
+    const url = `${APIFY_BASE}/acts/${encodeURIComponent(actor)}/run-sync-get-dataset-items?token=${encodeURIComponent(this.token())}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
