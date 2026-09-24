@@ -27,8 +27,22 @@ export type ProfileUrlResult =
   | { ok: false; reason: ProfileUrlRejection };
 
 const LINKEDIN_HOST = /(^|\.)linkedin\.com$/i;
-/** Identifiant public : lettres, chiffres, tirets — accents acceptés. */
-const IDENTIFIER = /^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u;
+/**
+ * Identifiant public d'un profil.
+ *
+ * Volontairement permissif : LinkedIn laisse mettre à peu près n'importe quoi
+ * dans un slug, emoji compris (`/in/dorian-soler-☀️-254915147` est un profil
+ * réel). Une version restreinte aux lettres et aux chiffres rejetait ces
+ * comptes en silence — le pire des deux mondes, puisqu'un faux rejet perd un
+ * créateur alors qu'un faux accord coûte au pire un compte qui ne remontera
+ * jamais rien et restera marqué « en attente ».
+ *
+ * On exclut donc seulement ce qui ne peut pas être un identifiant : espaces,
+ * séparateurs de chemin et de query. On exige en plus au moins une lettre ou
+ * un chiffre, pour qu'une suite de ponctuation ne passe pas.
+ */
+const IDENTIFIER = /^[^\s/?#\\]+$/u;
+const HAS_ALPHANUMERIC = /[\p{L}\p{N}]/u;
 
 export function normalizeProfileUrl(input: string): ProfileUrlResult {
   const raw = input.trim();
@@ -37,7 +51,9 @@ export function normalizeProfileUrl(input: string): ProfileUrlResult {
   // Un identifiant nu (« theo-gouman ») est accepté : c'est ce qu'on obtient
   // en copiant la fin d'une URL, et le refuser serait une friction gratuite.
   if (!raw.includes("/") && !raw.includes(" ")) {
-    if (!IDENTIFIER.test(raw)) return { ok: false, reason: "not_a_url" };
+    if (!IDENTIFIER.test(raw) || !HAS_ALPHANUMERIC.test(raw)) {
+      return { ok: false, reason: "not_a_url" };
+    }
     return { ok: true, value: canonical(raw) };
   }
 
@@ -67,17 +83,37 @@ export function normalizeProfileUrl(input: string): ProfileUrlResult {
   } catch {
     identifier = identifierSegment;
   }
-  if (!IDENTIFIER.test(identifier)) {
+  if (!IDENTIFIER.test(identifier) || !HAS_ALPHANUMERIC.test(identifier)) {
     return { ok: false, reason: "missing_identifier" };
   }
   return { ok: true, value: canonical(identifier) };
 }
 
+/**
+ * Identifiant opaque de membre LinkedIn (`/in/ACoAAAyy6A8B…`).
+ *
+ * LinkedIn sert deux formes d'URL de profil : le slug choisi par la personne,
+ * et cet identifiant encodé. Les deux ne se normalisent PAS pareil — le slug
+ * est insensible à la casse, celui-ci ne l'est pas du tout : le passer en
+ * minuscules produit une URL morte. C'est la forme que renvoient la plupart
+ * des outils qui lisent LinkedIn par API, donc le cas est courant, pas
+ * marginal.
+ *
+ * Le motif est volontairement étroit : préfixe `ACoA` ET longueur exacte de
+ * 39 caractères. Une version large (`ACoA` + « au moins dix caractères »)
+ * capturait aussi un slug ordinaire comme `ACoAlade-Martin` et lui conservait
+ * sa casse, alors qu'un slug doit être unifié en minuscules sous peine
+ * d'entrer deux fois dans une liste.
+ */
+const OPAQUE_MEMBER_ID = /^ACoA[A-Za-z0-9_-]{35}$/;
+
 function canonical(identifier: string): NormalizedProfile {
-  const lower = identifier.toLowerCase();
+  const canonicalId = OPAQUE_MEMBER_ID.test(identifier)
+    ? identifier
+    : identifier.toLowerCase();
   return {
-    url: `https://www.linkedin.com/in/${encodeURIComponent(lower)}`,
-    publicIdentifier: lower,
+    url: `https://www.linkedin.com/in/${encodeURIComponent(canonicalId)}`,
+    publicIdentifier: canonicalId,
   };
 }
 
