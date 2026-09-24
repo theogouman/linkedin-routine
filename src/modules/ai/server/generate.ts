@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { readEnv, requireEnv } from "@/shared/lib/env";
+import { loadAiSettings } from "./settings";
 import {
   buildSystemPrompt,
   buildUserPrompt,
@@ -20,14 +21,12 @@ import { isPlaceholder, PROCESS_FILES, type ProcessKind } from "../lib/process-f
  * exposerait le compte Claude de l'utilisateur. Le code ne lit donc QUE
  * `ANTHROPIC_API_KEY`.
  *
- * `effort: "low"` par défaut : rédiger un commentaire de cinquante mots selon
- * un process fourni n'est pas une tâche de raisonnement. C'est le réglage qui
- * tient la cible de « quelques euros par mois » sans rien perdre en qualité ;
- * il reste surchargeable.
+ * Le modèle et l'effort se règlent dans l'app (File ▸ Réglages ▸ Génération) :
+ * ce sont les deux curseurs qu'on ajuste en lisant les propositions, pas des
+ * constantes de déploiement. Leurs valeurs par défaut vivent dans
+ * `../lib/settings`.
  */
 
-const DEFAULT_MODEL = "claude-opus-5";
-const DEFAULT_EFFORT = "low";
 const MAX_TOKENS = 4000;
 
 let client: Anthropic | null = null;
@@ -72,10 +71,10 @@ export class GenerationError extends Error {
 export async function generateComment(
   context: GenerationContext,
 ): Promise<GenerationResult> {
-  const processMarkdown = await readProcess(context.kind);
-  const model = readEnv("ANTHROPIC_MODEL") ?? DEFAULT_MODEL;
-  const effort = (readEnv("ANTHROPIC_EFFORT") ?? DEFAULT_EFFORT) as
-    | "low" | "medium" | "high" | "xhigh" | "max";
+  const [processMarkdown, { model, effort }] = await Promise.all([
+    readProcess(context.kind),
+    loadAiSettings(),
+  ]);
 
   try {
     const response = await anthropic().messages.create({

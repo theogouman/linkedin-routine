@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertCircle, Bell, ChevronDown, FileText, LogOut } from "lucide-react";
 import {
+  saveAiSettingsAction,
   savePolicyAction,
   saveSyncSettingsAction,
   setSelfProfileAction,
@@ -15,6 +16,13 @@ import {
   SYNC_SETTINGS_BOUNDS,
   type SyncSettings,
 } from "@/modules/ingestion/lib/settings";
+import {
+  EFFORT_LEVELS,
+  MODEL_HINTS,
+  SUGGESTED_MODELS,
+  type AiSettings,
+  type Effort,
+} from "@/modules/ai/lib/settings";
 import { supportedTimezones } from "@/shared/lib/timezone";
 import { formatMinuteOfDay, parseMinuteOfDay, relativeTime } from "@/shared/lib/format";
 
@@ -45,6 +53,7 @@ export interface PolicyView {
 export function SettingsPanel({
   policy,
   syncSettings,
+  aiSettings,
   selfProfileUrl,
   processes,
   vapidPublicKey,
@@ -54,6 +63,7 @@ export function SettingsPanel({
 }: {
   policy: PolicyView;
   syncSettings: SyncSettings;
+  aiSettings: AiSettings;
   selfProfileUrl: string | null;
   processes: Array<{ kind: string; file: string; placeholder: boolean }>;
   vapidPublicKey: string | null;
@@ -82,6 +92,7 @@ export function SettingsPanel({
   const [end, setEnd] = useState(formatMinuteOfDay(policy.window.endMinute));
   const [timezone, setTimezone] = useState(policy.timezone);
   const [sync, setSync] = useState<SyncSettings>(syncSettings);
+  const [ai, setAi] = useState<AiSettings>(aiSettings);
   const [profileUrl, setProfileUrl] = useState(selfProfileUrl ?? "");
 
   // Calculée une fois : la liste complète des fuseaux d'ICU tient en quelques
@@ -119,6 +130,15 @@ export function SettingsPanel({
     startTransition(async () => {
       const result = await saveSyncSettingsAction(sync);
       if (result.ok) toast.success("Récupération enregistrée.");
+      else toast.error(result.message ?? "Enregistrement impossible.");
+      router.refresh();
+    });
+  };
+
+  const saveAi = () => {
+    startTransition(async () => {
+      const result = await saveAiSettingsAction(ai);
+      if (result.ok) toast.success("Génération enregistrée.");
       else toast.error(result.message ?? "Enregistrement impossible.");
       router.refresh();
     });
@@ -310,6 +330,68 @@ export function SettingsPanel({
               className="nc-btn nc-btn--primary mt-3"
             >
               {pending ? "Enregistrement…" : "Enregistrer la récupération"}
+            </button>
+          </Block>
+
+          <Block
+            title="Génération"
+            hint="Modèle et niveau d'effort. La cle d API reste une variable d environnement."
+          >
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+                Modèle
+              </span>
+              <input
+                value={ai.model}
+                onChange={(event) => setAi({ ...ai, model: event.target.value.trim() })}
+                list="modeles-anthropic"
+                className="nc-input"
+                placeholder="claude-opus-5"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <datalist id="modeles-anthropic">
+                {SUGGESTED_MODELS.map((id) => (
+                  <option key={id} value={id}>
+                    {MODEL_HINTS[id]}
+                  </option>
+                ))}
+              </datalist>
+            </label>
+
+            <label className="mt-2 flex flex-col gap-1">
+              <span className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+                Effort
+              </span>
+              <select
+                value={ai.effort}
+                onChange={(event) =>
+                  setAi({ ...ai, effort: event.target.value as Effort })
+                }
+                className="nc-input"
+              >
+                {EFFORT_LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <p className="mt-2 text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+              {MODEL_HINTS[ai.model] ?? "Modèle personnalisé — vérifié au premier appel."}{" "}
+              · `low` suffit pour un commentaire court ; monte à `medium` si les
+              propositions te semblent plates, avant de changer de modèle.
+            </p>
+
+            <button
+              type="button"
+              onClick={saveAi}
+              disabled={pending || ai.model === ""}
+              className="nc-btn nc-btn--primary mt-3"
+            >
+              {pending ? "Enregistrement…" : "Enregistrer la génération"}
             </button>
           </Block>
 

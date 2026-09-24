@@ -88,6 +88,7 @@ si `HIST_IGNORE_SPACE` est actif.
 | `APIFY_TOKEN` | oui | console Apify |
 | `UNIPILE_DSN` · `UNIPILE_API_KEY` · `UNIPILE_ACCOUNT_ID` | oui | console Unipile |
 | `ANTHROPIC_API_KEY` | oui | console Anthropic |
+| modèle et effort de génération | non | **se règlent dans l'app** (§5) |
 | réglages de récupération et fuseau | non | **se règlent dans l'app** (§6) |
 | tout le reste | non | valeurs par défaut |
 
@@ -302,17 +303,29 @@ Coût : à `claude-opus-5` en effort `low`, une génération consomme quelques
 centaines de tokens. 25 générations par jour restent sous quelques euros par
 mois.
 
-### `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT` — optionnelles
+### Modèle et effort — dans l'app
 
-```
-ANTHROPIC_MODEL=claude-opus-5
-ANTHROPIC_EFFORT=low          # low | medium | high | xhigh | max
-```
+**Rien à renseigner.** Ils se règlent dans **File ▸ Réglages ▸ Génération** et
+vivent en base :
+
+| Réglage | Valeur par défaut | Notes |
+|---|---|---|
+| Modèle | `claude-opus-5` | champ libre — tout identifiant `claude-…` est accepté, y compris un publié après cette version |
+| Effort | `low` | `low`, `medium`, `high`, `xhigh`, `max` |
 
 `low` suffit : rédiger cinquante mots selon un process fourni n'est pas une
 tâche de raisonnement. Monte à `medium` si les propositions te semblent plates
 une fois tes process rédigés — c'est le réglage à bouger en premier, avant de
 changer de modèle.
+
+Le champ modèle est libre volontairement : une liste fermée t'obligerait à
+redéployer le jour où Anthropic publie un nouvel identifiant. Un identifiant
+inexistant ne casse rien — la première génération renvoie l'erreur de l'API.
+
+`ANTHROPIC_MODEL` et `ANTHROPIC_EFFORT` subsistent comme valeurs de départ,
+lues tant qu'aucun enregistrement n'a eu lieu depuis l'app. `ANTHROPIC_API_KEY`
+reste en revanche une variable d'environnement : une clé d'API n'a rien à faire
+dans une base que l'app lit en clair.
 
 ---
 

@@ -11,6 +11,7 @@ import {
 } from "@/modules/engagement/lib/policy";
 import { loadPolicy, loadRampState } from "@/modules/engagement/server/settings";
 import { getProcessStatus } from "@/modules/ai/server/generate";
+import { loadAiSettings } from "@/modules/ai/server/settings";
 import { getSelfAccount } from "@/modules/lists/server/repository";
 import { getCursors, getRecentSyncRuns } from "@/modules/ingestion/server/cursors";
 import { loadSyncSettings } from "@/modules/ingestion/server/settings";
@@ -47,6 +48,7 @@ export default async function QueuePage() {
     runs,
     pushCount,
     syncSettings,
+    aiSettings,
   ] = await Promise.all([
     getPendingActions(),
     getJournal(60),
@@ -59,6 +61,7 @@ export default async function QueuePage() {
     getRecentSyncRuns(5),
     countSubscriptions(),
     loadSyncSettings(),
+    loadAiSettings(),
   ]);
 
   const history = await getSchedulingHistory(new Date(now.getTime() - 3 * 86_400_000));
@@ -119,6 +122,7 @@ export default async function QueuePage() {
           timezone: policy.timezone,
         }}
         syncSettings={syncSettings}
+        aiSettings={aiSettings}
         selfProfileUrl={self?.profile_url ?? null}
         processes={processes}
         vapidPublicKey={readEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY") ?? null}

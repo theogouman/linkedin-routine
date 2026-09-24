@@ -20,6 +20,8 @@ import { POST_BREAKER_START_FACTOR } from "@/modules/engagement/lib/policy";
 import { savePolicy } from "@/modules/engagement/server/settings";
 import { saveSyncSettings } from "@/modules/ingestion/server/settings";
 import type { SyncSettings } from "@/modules/ingestion/lib/settings";
+import { saveAiSettings } from "@/modules/ai/server/settings";
+import type { AiSettings } from "@/modules/ai/lib/settings";
 import { QueueSuspendedError } from "@/modules/engagement/server/queue";
 import {
   commentOnPost,
@@ -392,6 +394,24 @@ export async function saveSyncSettingsAction(
 ): Promise<ActionResult> {
   try {
     await saveSyncSettings(patch);
+    revalidatePath("/file");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Modèle et effort de génération (FR-019).
+ *
+ * `ANTHROPIC_API_KEY` reste dans l'environnement : une clé d'API n'a rien à
+ * faire en base. Seuls les deux curseurs qu'on ajuste passent ici.
+ */
+export async function saveAiSettingsAction(
+  patch: Partial<AiSettings>,
+): Promise<ActionResult> {
+  try {
+    await saveAiSettings(patch);
     revalidatePath("/file");
     return { ok: true };
   } catch (error) {
