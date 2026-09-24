@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { motionMs } from "./tokens";
+import { Portal } from "./Portal";
 
 /**
  * Agrandissement d'une image du fil.
@@ -66,6 +67,7 @@ export function Lightbox({
   if (!mounted) return null;
 
   return (
+    <Portal>
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center p-4"
       style={{
@@ -104,5 +106,6 @@ export function Lightbox({
         <X size={18} aria-hidden />
       </button>
     </div>
+    </Portal>
   );
 }

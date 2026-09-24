@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motionMs } from "./tokens";
+import { Portal } from "./Portal";
 
 /**
  * transitions.dev · 06 — Modal open / close.
@@ -78,6 +79,7 @@ export function Modal({
   if (!mounted) return null;
 
   return (
+    <Portal>
     <div
       className="fixed inset-0 z-[80] flex items-center justify-center p-4"
       style={{
@@ -101,5 +103,6 @@ export function Modal({
         {footer ? <div className="mt-4 flex items-center justify-end gap-2">{footer}</div> : null}
       </div>
     </div>
+    </Portal>
   );
 }

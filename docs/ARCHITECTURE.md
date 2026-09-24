@@ -107,7 +107,7 @@ la seconde ne touche aucune ligne.
 
 ## Tests
 
-245 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
+255 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
 
 | Sujet | Ce qui est vérifié |
 |---|---|
@@ -121,6 +121,7 @@ la seconde ne touche aucune ligne.
 | `model` | Haiku par défaut, et `output_config` n'est transmis qu'aux modèles qui le connaissent |
 | `nav-routes` | Aucun écran du groupe `(app)` n'est absent de la barre ; `/file` n'allume pas l'onglet `/fil` |
 | `reactions` | Le vocabulaire des six réactions est exactement celui de la contrainte SQL, et une valeur inconnue se dégrade en « J'aime » au lieu de lever |
+| `unipile` | La cause réelle d'un échec réseau atteint le journal, et un DSN collé sans schéma est complété plutôt que rejeté |
 | `normalize` (engagement) | Le compteur affiché somme la ventilation par type, et vaut `null` — jamais `0` — quand le fournisseur se tait |
 
 Deux tests ont déjà attrapé un bug réel avant qu'il n'existe en production :
@@ -143,11 +144,20 @@ un `startsWith` nu faisait allumer l'onglet « Fil » sur l'écran « File ».
 part aujourd'hui, et le régime du compte — partageaient un écran, et la seconde
 poussait la première sous la ligne de flottaison.
 
-La barre de navigation est **haute sur desktop, basse sur mobile**, rendue par
-un seul composant : dupliquer la liste d'onglets garantirait qu'un jour l'une
-des deux oublie un écran. L'ordre des onglets vit dans
-`shared/components/nav-routes.ts`, et c'est de lui que la transition de page
-tire son sens de glissement.
+La navigation est **une pilule flottante** : en bas sur mobile, en haut sur
+desktop. Un seul composant, un seul rendu — seule la position bascule, et la
+CSS s'en charge. Une version intermédiaire dessinait deux barres différentes,
+une pilule basse et un bandeau pleine largeur : elle doublait la liste des
+onglets et faisait changer de nature à l'objet selon la largeur de l'écran.
+
+L'ordre des onglets vit dans `shared/components/nav-routes.ts`, et c'est de lui
+que la transition de page tire son sens de glissement.
+
+Les calques flottants — visionneuse d'images, dialogues — sont montés sous
+`<body>` par un portail. `position: fixed` se cale sur la fenêtre **sauf** si un
+ancêtre porte un `transform`, un `filter` ou une `perspective`, ce que la
+bibliothèque de transitions fait en plusieurs endroits. Traquer ces ancêtres
+serait un combat sans fin ; les sortir du flux le règle une fois.
 
 ## Navigation : ce qui la rend légère
 
@@ -186,12 +196,18 @@ adapté, et uniquement cela :
   les utilitaires Tailwind sont dans une couche CSS et perdent donc contre les
   snippets quel que soit l'ordre.
 
-Une seule transition du catalogue n'est pas installée : **reasoning stream**,
-qui fait défiler un transcript de raisonnement d'agent deux lignes à la fois.
-L'app n'en affiche aucun, et lui en fabriquer un pour justifier l'animation
-serait exactement ce que le mouvement ne doit pas faire.
+Deux transitions du catalogue ne sont pas installées :
 
-Les trente et une autres portent chacune un état réel. Quelques exemples de ce
+- **reasoning stream**, qui fait défiler un transcript de raisonnement d'agent.
+  L'app n'en affiche aucun, et lui en fabriquer un pour justifier l'animation
+  serait exactement ce que le mouvement ne doit pas faire.
+- **card hover tilt**, retirée après essai. Sur une carte qui contient un champ
+  de saisie, une inclinaison qui suit le curseur rend la relecture pénible ; et
+  son `perspective()` faisait qu'un descendant en `position: fixed` se calait
+  sur la carte au lieu de la fenêtre — c'est ce qui enfermait la visionneuse
+  d'images dans la publication.
+
+Les trente autres portent chacune un état réel. Quelques exemples de ce
 que cela veut dire concrètement :
 
 | Transition | Ce qu'elle rend visible |
@@ -205,7 +221,6 @@ que cela veut dire concrètement :
 | Banner stacking | Trois alertes qui s'empilent au lieu de repousser le fil sous la ligne de flottaison |
 | Error shake | Une erreur là où on la corrige, plutôt qu'un toast à l'autre bout de l'écran |
 | Modal + dropdown | `window.prompt` et `window.confirm`, qui affichent le nom d'hôte en PWA installée |
-| Card tilt | Au pointeur fin uniquement, et coupé pendant la rédaction |
 
 
 ## Les réactions

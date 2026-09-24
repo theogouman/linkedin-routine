@@ -10,7 +10,14 @@ import { motionMs, prefersReducedMotion } from "./tokens";
  * proposition générée arrive dans le composer : le texte n'apparaît pas d'un
  * bloc, on le voit se poser — ce qui donne le temps de commencer à le lire
  * avant de décider s'il part (FR-006).
+ *
+ * L'écart entre deux mots est CALCULÉ pour que l'ensemble tienne dans un
+ * budget fixe, au lieu d'être un délai fixe par mot. À 60 ms le mot, un
+ * commentaire de soixante mots mettait trois secondes et demie à se poser :
+ * l'effet, censé accompagner la lecture, devenait une attente. Le budget
+ * garde le mouvement pour un texte court et l'accélère sur un texte long.
  */
+const TOTAL_BUDGET_MS = 650;
 export function StreamingText({
   text,
   className,
@@ -48,7 +55,12 @@ export function StreamingText({
       });
       return () => window.cancelAnimationFrame(frame);
     }
-    const gap = motionMs("--stream-gap", 60);
+    // Écart calculé pour tenir dans le budget, plancher à 8 ms : en dessous,
+    // le navigateur regroupe les images et le fondu ne se voit plus.
+    const gap = Math.max(
+      8,
+      Math.min(motionMs("--stream-gap", 60), TOTAL_BUDGET_MS / Math.max(words.length, 1)),
+    );
     let index = 0;
     const id = window.setInterval(() => {
       index += 1;

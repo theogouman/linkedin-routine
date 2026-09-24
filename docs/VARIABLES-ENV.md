@@ -256,6 +256,12 @@ Compte payant, ~49 €/mois, un seul compte LinkedIn connecté.
 
 ### `UNIPILE_DSN`
 
+> Le DSN est **normalisé au premier envoi** : le schéma `https://` est ajouté
+> s'il manque, et `/api/v1` aussi. Coller la valeur telle que le tableau de
+> bord Unipile l'affiche (`api3.unipile.com:13031`) fonctionne donc. Une valeur
+> inexploitable est refusée avec un message qui dit quoi corriger, au lieu d'un
+> « fetch failed » au journal.
+
 Dashboard Unipile → l'adresse de **ton** instance. Forme :
 
 ```

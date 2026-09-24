@@ -56,10 +56,10 @@ export default function AppLayout({
           ),
         }}
       />
-      {/* pb : hauteur de la barre flottante + safe-area sur mobile, pour que le
-          dernier élément de chaque liste ne se cache jamais dessous. Sur
-          desktop la barre est en haut, il n'y a plus rien à compenser. */}
-      <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-[calc(112px+env(safe-area-inset-bottom,0px))] md:pb-16">
+      {/* La pilule flotte au-dessus du contenu : la gouttière la compense là
+          où elle se trouve — en bas sur mobile, en haut sur desktop — pour
+          qu'aucun élément ne se cache dessous. */}
+      <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-[calc(112px+env(safe-area-inset-bottom,0px))] md:pt-[92px] md:pb-16">
         {children}
       </div>
       <BackToTop />

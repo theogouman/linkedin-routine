@@ -8,12 +8,13 @@ import { activeNavRoute, NAV_ROUTES } from "./nav-routes";
 import { scrollAppToTop } from "@/shared/lib/scroll";
 
 /**
- * Navigation principale — barre haute sur desktop, barre flottante basse sur
- * mobile.
+ * Navigation principale : une pilule flottante, en bas sur mobile, en haut sur
+ * desktop.
  *
- * Un seul composant rend les deux : dupliquer la liste d'onglets garantirait
- * qu'un jour l'une des deux oublie un écran. Ce qui change entre les deux
- * n'est que la position, la densité et l'orientation de l'étiquette.
+ * Une seule barre, un seul rendu. La version précédente en dessinait deux — une
+ * pilule basse et un bandeau pleine largeur — ce qui doublait la liste des
+ * onglets et changeait la nature de l'objet selon la taille de l'écran. Ici,
+ * seule la position bascule ; la CSS s'en charge, le composant l'ignore.
  *
  * transitions.dev · 16 (Tabs sliding) — la pilule active est positionnée
  * impérativement à partir des dimensions mesurées de l'onglet. C'est le seul
@@ -37,7 +38,11 @@ export interface NavBadgeSlots {
   queue: ReactNode;
 }
 
-function useSlidingPill(activeIndex: number, pathname: string) {
+export function AppNav({ badges }: { badges: NavBadgeSlots }) {
+  const pathname = usePathname();
+  const active = activeNavRoute(pathname);
+  const activeIndex = TABS.findIndex((tab) => tab.href === active);
+
   const containerRef = useRef<HTMLElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
   const previousIndex = useRef<number | null>(null);
@@ -69,28 +74,16 @@ function useSlidingPill(activeIndex: number, pathname: string) {
     }
     previousIndex.current = activeIndex;
 
-    // Les deux barres coexistent dans le DOM, l'une masquée en `display: none`
-    // — donc de largeur nulle. Au franchissement du point de rupture, celle qui
-    // apparaît doit remesurer, sinon sa pilule reste collée à gauche.
+    // La densité des onglets change au point de rupture : la pilule doit
+    // remesurer, sinon sa largeur reste celle de l'autre disposition.
     const onResize = () => move();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [activeIndex, pathname]);
 
-  return { containerRef, pillRef };
-}
-
-function NavItems({
-  badges,
-  active,
-  variant,
-}: {
-  badges: NavBadgeSlots;
-  active: string | null;
-  variant: "top" | "bottom";
-}) {
   return (
-    <>
+    <nav ref={containerRef} className="nc-nav-pill-bar" aria-label="Navigation principale">
+      <span ref={pillRef} className="nc-nav-pill" aria-hidden />
       {TABS.map((tab) => {
         const Icon = tab.icon;
         const isActive = active === tab.href;
@@ -100,7 +93,7 @@ function NavItems({
             href={tab.href}
             data-nav-item
             data-active={isActive}
-            className={variant === "top" ? "nc-nav-item nc-nav-item--top" : "nc-nav-item"}
+            className="nc-nav-item"
             aria-current={isActive ? "page" : undefined}
             prefetch
             onClick={(event) => {
@@ -111,44 +104,12 @@ function NavItems({
               scrollAppToTop();
             }}
           >
-            <Icon size={variant === "top" ? 16 : 19} strokeWidth={isActive ? 2.2 : 1.8} aria-hidden />
+            <Icon size={19} strokeWidth={isActive ? 2.2 : 1.8} aria-hidden />
             <span>{tab.label}</span>
             {tab.slot ? badges[tab.slot] : null}
           </Link>
         );
       })}
-    </>
-  );
-}
-
-export function AppNav({ badges }: { badges: NavBadgeSlots }) {
-  const pathname = usePathname();
-  const active = activeNavRoute(pathname);
-  const activeIndex = TABS.findIndex((tab) => tab.href === active);
-
-  const { containerRef: bottomNav, pillRef: bottomPill } = useSlidingPill(activeIndex, pathname);
-  const { containerRef: topNav, pillRef: topPill } = useSlidingPill(activeIndex, pathname);
-
-  return (
-    <>
-      {/* Desktop : la barre est en haut, collante, pleine largeur. */}
-      <header className="nc-top-nav" aria-label="Navigation principale">
-        {/* Même gouttière que le contenu : le mot-marque doit s'aligner sur la
-            colonne de lecture, pas flotter à côté. */}
-        <div className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4">
-          <span className="text-[15px] font-semibold tracking-tight">Routine</span>
-          <nav ref={topNav} className="nc-top-nav-tabs relative ml-auto flex items-center gap-1">
-            <span ref={topPill} className="nc-nav-pill" aria-hidden />
-            <NavItems badges={badges} active={active} variant="top" />
-          </nav>
-        </div>
-      </header>
-
-      {/* Mobile : barre flottante basse, au pouce. */}
-      <nav ref={bottomNav} className="nc-bottom-nav" aria-label="Navigation principale">
-        <span ref={bottomPill} className="nc-nav-pill" aria-hidden />
-        <NavItems badges={badges} active={active} variant="bottom" />
-      </nav>
-    </>
+    </nav>
   );
 }

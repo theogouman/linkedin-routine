@@ -384,39 +384,11 @@ html {
 .dark .nc-badge--alert { background: rgba(153, 27, 27, 0.25); color: #fca5a5; }
 
 /* ── Barre de navigation ────────────────────────────────────────────────── */
-/* Point de rupture unique pour les deux barres : au-dessus, la navigation
-   monte en haut de l'écran ; en dessous, elle reste sous le pouce. `md` de
-   Tailwind vaut 48rem — on l'écrit en dur ici parce que la règle est portée
-   par du CSS natif, pas par une classe utilitaire. */
-.nc-top-nav { display: none; }
-
-@media (min-width: 48rem) {
-  .nc-top-nav {
-    display: flex;
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    align-items: center;
-    height: 56px;
-    background: var(--nc-glass-bg);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    border-bottom: 1px solid var(--color-border-default);
-  }
-}
-
-.nc-top-nav-tabs {
-  gap: 2px;
-}
-.nc-nav-item--top {
-  flex-direction: row;
-  gap: 7px;
-  min-width: 0;
-  padding: 7px 12px;
-  font-size: 13px;
-}
-
-.nc-bottom-nav {
+/* UNE pilule flottante, dont seule la position change au point de rupture :
+   sous le pouce sur mobile, en haut de l'écran sur desktop. Dessiner deux
+   barres différentes doublerait la liste des onglets et ferait changer de
+   nature à l'objet selon la largeur. */
+.nc-nav-pill-bar {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
@@ -432,30 +404,41 @@ html {
   box-shadow: var(--nc-shadow-2);
   transition: transform 240ms var(--nc-ease), opacity 200ms ease;
 }
+
+/* Desktop : la même pilule, en haut. `bottom: auto` est indispensable —
+   laisser les deux ancrages posés étire l'élément sur toute la hauteur. */
+@media (min-width: 48rem) {
+  .nc-nav-pill-bar {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+  }
+}
+
 /* Après la première ouverture du clavier, WebKit contracte le viewport en PWA
    et ne le restaure pas : 100lvh − 100dvh vaut alors la dérive exacte. On la
    retranche pour que la barre reste collée au bord réel de l'écran. */
-@media (display-mode: standalone) {
-  .nc-bottom-nav {
+@media (display-mode: standalone) and (max-width: 47.999rem) {
+  .nc-nav-pill-bar {
     bottom: calc(10px + env(safe-area-inset-bottom, 0px) - (100lvh - 100dvh));
   }
 }
-body.nc-kb-open .nc-bottom-nav {
+
+/* Le clavier monte : la barre s'efface vers le bas sur mobile, vers le haut
+   sur desktop — dans les deux cas hors de l'écran, jamais par-dessus le
+   composer. */
+body.nc-kb-open .nc-nav-pill-bar {
   transform: translateX(-50%)
     translateY(calc(100% + 10px + env(safe-area-inset-bottom, 0px) + 24px));
   opacity: 0;
   pointer-events: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .nc-bottom-nav { transition: opacity 200ms ease; }
-}
-
-/* Déclarée APRÈS `.nc-bottom-nav` et non avant : les deux sélecteurs ont la
-   même spécificité, c'est donc l'ordre dans la feuille qui tranche. Placée
-   plus haut, cette règle était écrasée par le `display: flex` de la barre et
-   les deux navigations s'affichaient ensemble sur desktop. */
 @media (min-width: 48rem) {
-  .nc-bottom-nav { display: none; }
+  body.nc-kb-open .nc-nav-pill-bar {
+    transform: translateX(-50%) translateY(calc(-100% - 24px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-nav-pill-bar { transition: opacity 200ms ease; }
 }
 
 .nc-nav-item {
@@ -505,7 +488,6 @@ body.nc-kb-open .nc-bottom-nav {
 
 /* La pastille s'ancre sur l'onglet (déjà `position: relative` plus haut). */
 .nc-nav-item .t-badge { top: 1px; right: 6px; }
-.nc-nav-item--top .t-badge { top: -4px; right: -2px; }
 
 /* ── Entrées de contenu ─────────────────────────────────────────────────── */
 @keyframes nc-mode-in {
@@ -1487,43 +1469,12 @@ body.nc-kb-open .nc-bottom-nav {
   .t-stagger-line { transition: none !important; }
 }
 
-/* ── 19 · Card hover tilt ───────────────────────────────────────────────── */
-.t-tilt { touch-action: none; }
-.t-tilt-card {
-  position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  transform:
-    perspective(var(--tilt-perspective))
-    rotateX(var(--tilt-rx, 0deg))
-    rotateY(var(--tilt-ry, 0deg));
-  transform-style: preserve-3d;
-  transition: transform var(--tilt-return) var(--tilt-return-ease);
-  will-change: transform;
-}
-.t-tilt-card.is-tilting {
-  transition: transform var(--tilt-follow) var(--tilt-follow-ease);
-}
-.t-tilt-glare {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  mix-blend-mode: screen;
-  background:
-    radial-gradient(circle 95px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
-      rgba(255,255,255,0.48), rgba(255,255,255,0.06) 52%, rgba(255,255,255,0) 84%),
-    radial-gradient(circle 200px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
-      rgba(255,255,255,0.22), rgba(255,255,255,0.04) 58%, rgba(255,255,255,0) 78%),
-    radial-gradient(circle 360px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
-      rgba(255,255,255,0.10), rgba(255,255,255,0) 88%);
-  transition: opacity var(--tilt-glare-fade) var(--tilt-glare-ease);
-}
-.t-tilt.is-hover .t-tilt-glare { opacity: var(--tilt-glare-opacity); }
-
-@media (prefers-reduced-motion: reduce) {
-  .t-tilt-card { transform: none !important; transition: none !important; }
-}
+/* ── 19 · Card hover tilt — NON INSTALLÉ ────────────────────────────────── */
+/* Retiré à l'usage. Sur une carte qui contient un champ de saisie, une
+   inclinaison qui suit le curseur rend la relecture pénible, et
+   `perspective()` fait qu'un descendant en `position: fixed` se cale sur la
+   carte au lieu de la fenêtre — c'est ce qui enfermait la visionneuse d'images
+   dans la publication. Le snippet reste disponible dans la bibliothèque. */
 
 /* ── 20 · Plus to menu morph ────────────────────────────────────────────── */
 .t-morph {
@@ -1938,12 +1889,7 @@ body.nc-kb-open .nc-bottom-nav {
 .nc-stack-banner { width: 100%; }
 
 /* ── Raccords entre la bibliothèque et la DA ────────────────────────────── */
-/* `.t-tilt-card` pose un rayon de 12 px ; nos cartes en ont 16. Les deux sont
-   des sélecteurs de classe simple et le snippet vient après dans la feuille,
-   donc il gagnerait : on remonte la spécificité plutôt que d'amputer le
-   snippet, qui reste utilisable tel quel ailleurs. */
-.t-tilt-card.nc-card { border-radius: var(--nc-radius-sm); }
-/* Idem pour la barre d'onglets : le segment du fil doit pouvoir défiler. */
+/* La barre d'onglets : le segment du fil doit pouvoir défiler. */
 .nc-scroll-x.t-tabs { display: flex; }
 /* Et pour le groupe d'infobulles : le snippet le pose en `inline-flex`, ce qui
    faisait rétrécir toute carte enveloppée à la largeur de son contenu. Les

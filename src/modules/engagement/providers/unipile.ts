@@ -39,6 +39,51 @@ export interface UnipileOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Met le DSN en forme et refuse ce qui ne peut pas marcher.
+ *
+ * Unipile donne un DSN de la forme `api3.unipile.com:13031`, que l'on copie
+ * volontiers sans schéma. Sans `https://`, `fetch` échoue sur une URL invalide
+ * et le journal n'en garde qu'un « fetch failed ». On complète le schéma, on
+ * ajoute `/api/v1` s'il manque, et on refuse tôt ce qui reste inexploitable —
+ * au moment de l'envoi, avec un message qui dit quoi corriger.
+ */
+export function normalizeDsn(raw: string): string {
+  // On NE rogne PAS les barres avant d'analyser : sur une chaîne réduite au
+  // schéma, « https:// » deviendrait « https: », le test de schéma échouerait,
+  // et on reconstruirait « https://https: » — une URL parfaitement valide
+  // pointant nulle part. Les barres finales sont retirées du chemin, après
+  // analyse, là où elles ont un sens.
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    throw new WriteProviderError(
+      "UNIPILE_DSN est vide. Copie le DSN affiché dans le tableau de bord Unipile.",
+      undefined,
+      "config",
+    );
+  }
+
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    throw new WriteProviderError(
+      `UNIPILE_DSN n'est pas une URL exploitable : « ${trimmed} ». Forme attendue : https://apiXX.unipile.com:PORT/api/v1`,
+      undefined,
+      "config",
+    );
+  }
+
+  // Le chemin de version fait partie du DSN chez Unipile ; l'oublier donne des
+  // 404 sur chaque route, ce qui ressemble à une route disparue.
+  const path = url.pathname.replace(/\/+$/, "");
+  if (path === "" || path === "/") url.pathname = "/api/v1";
+
+  return url.toString().replace(/\/+$/, "");
+}
+
 export class UnipileWriteProvider implements WriteProvider {
   readonly name = "unipile";
 
@@ -71,7 +116,7 @@ export class UnipileWriteProvider implements WriteProvider {
   private resolve(): { dsn: string; apiKey: string; accountId: string } {
     if (this.credentials === null) {
       this.credentials = {
-        dsn: (this.options.dsn ?? requireEnv("UNIPILE_DSN")).replace(/\/+$/, ""),
+        dsn: normalizeDsn(this.options.dsn ?? requireEnv("UNIPILE_DSN")),
         apiKey: this.options.apiKey ?? requireEnv("UNIPILE_API_KEY"),
         accountId: this.options.accountId ?? requireEnv("UNIPILE_ACCOUNT_ID"),
       };
@@ -129,9 +174,7 @@ export class UnipileWriteProvider implements WriteProvider {
           "timeout",
         );
       }
-      throw new WriteProviderError(
-        error instanceof Error ? error.message : String(error),
-      );
+      throw new WriteProviderError(describeNetworkError(error));
     } finally {
       clearTimeout(timer);
     }
@@ -175,6 +218,35 @@ export class UnipileWriteProvider implements WriteProvider {
     });
     return toResult(raw);
   }
+}
+
+/**
+ * Déplie la chaîne des `cause`.
+ *
+ * `fetch` rejette avec un `TypeError: fetch failed` dont le message ne dit
+ * RIEN : la raison réelle — DNS introuvable, connexion refusée, certificat
+ * invalide, délai de connexion — vit dans `error.cause`, parfois sur deux
+ * niveaux. Un like a échoué en production avec « fetch failed » au journal, et
+ * il a fallu aller lire les traces pour comprendre qu'on ne savait toujours
+ * pas pourquoi. Le message porte désormais le code système.
+ */
+export function describeNetworkError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+
+  const parts: string[] = [error.message];
+  let cause: unknown = (error as { cause?: unknown }).cause;
+  let depth = 0;
+  while (cause instanceof Error && depth < 4) {
+    const code = (cause as { code?: unknown }).code;
+    const detail =
+      typeof code === "string" && !cause.message.includes(code)
+        ? `${cause.message} (${code})`
+        : cause.message;
+    if (!parts.includes(detail)) parts.push(detail);
+    cause = (cause as { cause?: unknown }).cause;
+    depth += 1;
+  }
+  return parts.join(" — ");
 }
 
 function extractCode(body: unknown): string | undefined {

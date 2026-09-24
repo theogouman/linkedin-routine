@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ChevronDown, RefreshCw } from "lucide-react";
 import { refreshNow } from "@/app/actions";
@@ -29,6 +29,10 @@ import { scrollAppToTop } from "@/shared/lib/scroll";
  * sont pas deux réglages mais deux moments — vider la file, ou relire ce qu'on
  * a fait — donc un basculement et non une case de plus.
  */
+function signature(scope: string, listIds: string[]): string {
+  return `${scope}|${[...listIds].sort().join(",")}`;
+}
+
 export function FeedToolbar({
   lists,
   selectedListIds,
@@ -44,19 +48,52 @@ export function FeedToolbar({
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
 
+  // État affiché, découplé de l'URL.
+  //
+  // `router.push` ne rend la main qu'après le rendu serveur du nouveau feed :
+  // le bouton restait donc sur son ancien libellé pendant tout l'aller-retour,
+  // et le basculement paraissait en retard d'une seconde sur le clic. Le
+  // bouton bascule maintenant tout de suite, la navigation suit derrière, et
+  // l'URL reprend la main quand elle arrive — si elle contredit l'affichage
+  // (retour arrière, lien partagé), c'est elle qui gagne.
+  const [shownScope, setShownScope] = useState(scope);
+  const [shownListIds, setShownListIds] = useState(selectedListIds);
+  const [syncedWith, setSyncedWith] = useState(() => signature(scope, selectedListIds));
+
+  // Resynchronisation pendant le rendu (motif React officiel) : dès que l'URL
+  // change vraiment, elle reprend la main sur l'affichage optimiste. Le faire
+  // dans un effet coûterait un rendu de plus à chaque clic — exactement la
+  // latence qu'on cherche à supprimer.
+  const fromUrl = signature(scope, selectedListIds);
+  if (fromUrl !== syncedWith) {
+    setSyncedWith(fromUrl);
+    setShownScope(scope);
+    setShownListIds(selectedListIds);
+  }
+
   const push = (mutate: (next: URLSearchParams) => void) => {
     const next = new URLSearchParams(params.toString());
     mutate(next);
     const query = next.toString();
-    router.push(query === "" ? "/fil" : `/fil?${query}`);
+    // Dans une transition : la navigation ne bloque pas la peinture du nouvel
+    // état du bouton, et React garde l'écran précédent visible pendant que le
+    // segment se rend au lieu de le vider.
+    startTransition(() => {
+      router.push(query === "" ? "/fil" : `/fil?${query}`);
+    });
     // Changer de filtre change la file : rester au milieu de l'ancienne
     // n'aurait pas de sens, les éléments sous les yeux ne sont plus les mêmes.
     scrollAppToTop();
   };
 
   const toggleList = (id: string, next: boolean) => {
+    const optimistic = new Set(shownListIds);
+    if (next) optimistic.add(id);
+    else optimistic.delete(id);
+    setShownListIds([...optimistic]);
+
     push((query) => {
-      const current = new Set(selectedListIds);
+      const current = new Set(shownListIds);
       if (next) current.add(id);
       else current.delete(id);
       if (current.size === 0) query.delete("liste");
@@ -65,8 +102,10 @@ export function FeedToolbar({
   };
 
   const toggleScope = () => {
+    const next = shownScope === "unprocessed" ? "processed" : "unprocessed";
+    setShownScope(next);
     push((query) => {
-      if (scope === "unprocessed") query.set("vue", "traite");
+      if (next === "processed") query.set("vue", "traite");
       else query.delete("vue");
     });
   };
@@ -87,7 +126,7 @@ export function FeedToolbar({
     });
   };
 
-  const count = selectedListIds.length;
+  const count = shownListIds.length;
   const listLabel = count === 0 ? "Listes" : `${count} liste${count > 1 ? "s" : ""}`;
 
   return (
@@ -119,7 +158,7 @@ export function FeedToolbar({
         {() => (
           <ListPickerMenu
             lists={lists}
-            selected={selectedListIds}
+            selected={shownListIds}
             onToggle={toggleList}
             footer={
               count > 0 ? (
@@ -143,11 +182,11 @@ export function FeedToolbar({
         type="button"
         onClick={toggleScope}
         className="nc-btn nc-btn--ghost nc-btn--sm shrink-0"
-        data-active={scope === "processed"}
-        aria-pressed={scope === "processed"}
+        data-active={shownScope === "processed"}
+        aria-pressed={shownScope === "processed"}
       >
-        <ScaleDownFade swapKey={scope}>
-          {scope === "processed" ? (
+        <ScaleDownFade swapKey={shownScope}>
+          {shownScope === "processed" ? (
             <>
               <CheckmarkIcon />
               Déjà commenté

@@ -7,7 +7,7 @@ import { scrollAppToTop } from "@/shared/lib/scroll";
 /**
  * Retour en haut, desktop uniquement.
  *
- * Sur mobile la barre de navigation est déjà sous le pouce et un onglet actif
+ * Sur mobile la pilule de navigation est déjà sous le pouce et un onglet actif
  * y remonte (cf. `AppNav`) : un bouton de plus n'y ajouterait qu'un obstacle
  * devant le contenu.
  *
