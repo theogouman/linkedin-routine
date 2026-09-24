@@ -35,6 +35,18 @@ export interface OwnPostRef {
 export interface SyncPorts {
   listAccounts(): Promise<SyncAccount[]>;
   readCursor(key: string): Promise<CursorState>;
+  /**
+   * Lecture de TOUS les curseurs en une fois.
+   *
+   * Optionnelle pour que les tests puissent s'en passer, mais indispensable en
+   * production : ordonner les comptes suppose de connaître leur curseur, et les
+   * lire un par un coûtait un aller-retour réseau par compte. À 373 comptes,
+   * ces lectures consommaient à elles seules la totalité du budget du passage —
+   * la fonction s'arrêtait sur son échéance avant d'avoir interrogé un seul
+   * profil. Trois actualisations de suite se sont terminées ainsi, « réussies »,
+   * avec zéro compte traité.
+   */
+  readAllCursors?(): Promise<Map<string, CursorState>>;
   recordCursorSuccess(key: string, syncedAt: Date): Promise<void>;
   recordCursorFailure(key: string, reason: string): Promise<void>;
   savePosts(
@@ -61,6 +73,11 @@ export interface SyncOptions {
   receivedCommentsWindowDays: number;
   maxPostsPerAccount: number;
   maxCommentsPerPost: number;
+  /**
+   * Date de départ du corpus, propagée à chaque fenêtre de récupération.
+   * `null` = pas de borne, comportement historique.
+   */
+  startDate?: Date | null;
   /** `posts` seul, `comments` seul, ou les deux. */
   scope?: "all" | "posts" | "comments";
   /**
@@ -150,10 +167,7 @@ async function syncPosts(
   // Les comptes jamais synchronisés passent en premier, puis les plus anciens.
   // Sans cet ordre, un passage borné rejouerait toujours les mêmes premiers
   // comptes et les derniers de la liste n'auraient jamais leur tour.
-  const cursors = new Map<string, CursorState>();
-  for (const account of all) {
-    cursors.set(account.id, await ports.readCursor(postsCursorKey(account.id)));
-  }
+  const cursors = await readCursorsFor(ports, all);
   const ordered = [...all].sort((a, b) => {
     const left = cursors.get(a.id)?.lastSyncedAt?.getTime() ?? 0;
     const right = cursors.get(b.id)?.lastSyncedAt?.getTime() ?? 0;
@@ -175,6 +189,7 @@ async function syncPosts(
       now: options.now,
       initialBackfillDays: options.initialBackfillDays,
       maxLookbackDays: options.maxLookbackDays,
+      startDate: options.startDate ?? null,
     });
     if (window.truncated) report.truncated.push(account.profileUrl);
 
@@ -264,6 +279,29 @@ async function syncPosts(
   }
 }
 
+/**
+ * Curseurs de tous les comptes, en une lecture quand le port le permet.
+ *
+ * Un compte absent de la table n'a simplement jamais été synchronisé : on rend
+ * l'état vierge sans repartir en base, sans quoi le gain serait annulé au
+ * premier amorçage — c'est précisément le cas où aucun curseur n'existe.
+ */
+async function readCursorsFor(
+  ports: SyncPorts,
+  accounts: SyncAccount[],
+): Promise<Map<string, CursorState>> {
+  const cursors = new Map<string, CursorState>();
+  const bulk = ports.readAllCursors ? await ports.readAllCursors() : null;
+  for (const account of accounts) {
+    const key = postsCursorKey(account.id);
+    cursors.set(
+      account.id,
+      bulk ? bulk.get(key) ?? { lastSyncedAt: null } : await ports.readCursor(key),
+    );
+  }
+  return cursors;
+}
+
 async function syncReceivedComments(
   provider: IngestionProvider,
   ports: SyncPorts,
@@ -275,6 +313,7 @@ async function syncReceivedComments(
     now: options.now,
     initialBackfillDays: options.initialBackfillDays,
     maxLookbackDays: options.maxLookbackDays,
+    startDate: options.startDate ?? null,
     windowDays: options.receivedCommentsWindowDays,
   });
 

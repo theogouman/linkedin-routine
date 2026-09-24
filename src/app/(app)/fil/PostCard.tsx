@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Check, MessageSquare, MoreHorizontal, Undo2 } from "lucide-react";
@@ -75,6 +75,9 @@ export function PostCard({
   onRemoved?: (accountId: string | null) => void;
 }) {
   const router = useRouter();
+  // Sert d'ancre au repli du texte long : c'est la carte qu'on veut revoir,
+  // pas le paragraphe.
+  const cardRef = useRef<HTMLElement | null>(null);
   const [justQueued, setJustQueued] = useState(false);
   const [zoomed, setZoomed] = useState<string | null>(null);
   const [listsOpen, setListsOpen] = useState(false);
@@ -152,7 +155,11 @@ export function PostCard({
 
   return (
     <>
-      <article className="nc-card t-resize overflow-hidden" data-processed={processed}>
+      <article
+        ref={cardRef}
+        className="nc-card t-resize overflow-hidden"
+        data-processed={processed}
+      >
         {/* Une infobulle est posée au-dessus de son groupe : un groupe à
             l'échelle de la carte la projetterait au-dessus de la carte, à
             cinquante centimètres du bouton qui l'a demandée. D'où un groupe
@@ -291,7 +298,7 @@ export function PostCard({
         </TooltipGroup>
 
         {post.body ? (
-          <ExpandableText className="px-4">
+          <ExpandableText className="px-4" anchorRef={cardRef}>
             <p className="nc-selectable whitespace-pre-wrap text-[15px] leading-[1.55]">
               {post.body}
             </p>

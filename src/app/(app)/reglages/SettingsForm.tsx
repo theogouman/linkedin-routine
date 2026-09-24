@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertCircle, Bell, Check, FileText, LogOut } from "lucide-react";
+import { AlertCircle, Bell, Check, FileText, LogOut, RotateCcw } from "lucide-react";
 import {
+  restartIngestionAction,
   saveGenerationSettingsAction,
   savePolicyAction,
   setSelfProfileAction,
@@ -50,11 +51,13 @@ type Section =
   | "modele"
   | "process"
   | "notifications"
+  | "recuperation"
   | "diagnostics";
 
 export function SettingsForm({
   policy,
   selfProfileUrl,
+  ingestionStart,
   processes,
   generation,
   vapidPublicKey,
@@ -64,6 +67,8 @@ export function SettingsForm({
 }: {
   policy: PolicyView;
   selfProfileUrl: string | null;
+  /** Date de départ du corpus, en ISO. `null` = aucune borne fixée. */
+  ingestionStart: string | null;
   processes: Array<{ kind: string; file: string; placeholder: boolean }>;
   generation: GenerationSettings;
   vapidPublicKey: string | null;
@@ -103,6 +108,20 @@ export function SettingsForm({
   const profileShake = useShake();
 
   const toggle = (section: Section) => setOpen((current) => (current === section ? null : section));
+
+  const restart = () => {
+    startTransition(async () => {
+      const result = await restartIngestionAction();
+      if (!result.ok) {
+        toast.error(result.message ?? "Reprise impossible.");
+        return;
+      }
+      toast.success(
+        `Départ fixé à aujourd'hui — ${result.cleared ?? 0} compte(s) à réinterroger. Lance une actualisation depuis le feed.`,
+      );
+      router.refresh();
+    });
+  };
 
   const savePolicy = () => {
     const startMinute = parseMinuteOfDay(start);
@@ -463,6 +482,41 @@ export function SettingsForm({
               }}
             />
           </div>
+        </div>
+      </Accordion>
+
+      <Accordion
+        className="nc-card nc-content-enter overflow-hidden"
+        open={open === "recuperation"}
+        onToggle={() => toggle("recuperation")}
+        title="Récupération"
+        meta={
+          ingestionStart
+            ? `Depuis le ${new Date(ingestionStart).toLocaleDateString("fr-FR")}`
+            : "Aucune date de départ"
+        }
+      >
+        <div className="flex flex-col gap-3 px-4 pb-4">
+          <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+            Rien de publié avant la date de départ n&apos;est jamais demandé au
+            scraper, sur aucun compte. Repartir d&apos;aujourd&apos;hui
+            réinterroge tous les comptes sur la seule journée en cours ; ensuite
+            chaque actualisation ne ramène que ce qui est paru depuis la
+            précédente.
+          </p>
+          <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+            Aucune publication n&apos;est supprimée : celles déjà au fil restent,
+            avec leur statut.
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={restart}
+            className="nc-btn nc-btn--surface nc-btn--sm self-start"
+          >
+            <RotateCcw size={14} aria-hidden />
+            Repartir d&apos;aujourd&apos;hui
+          </button>
         </div>
       </Accordion>
 

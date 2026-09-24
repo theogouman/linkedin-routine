@@ -22,6 +22,7 @@ import { motionMs } from "./tokens";
  */
 const CLOSE_DELAY_MS = 220;
 const LONG_PRESS_MS = 350;
+const MOVE_TOLERANCE_PX = 10;
 
 export function ReactionPicker({
   current,
@@ -40,6 +41,7 @@ export function ReactionPicker({
   const closeTimer = useRef<number | null>(null);
   const pressTimer = useRef<number | null>(null);
   const suppressClick = useRef(false);
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -63,6 +65,12 @@ export function ReactionPicker({
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  const cancelPress = () => {
+    if (pressTimer.current !== null) window.clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+    pressOrigin.current = null;
+  };
 
   const cancelClose = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
@@ -101,6 +109,10 @@ export function ReactionPicker({
       onPointerLeave={() => {
         if (fine()) scheduleClose();
       }}
+      // Le menu contextuel long-appui d'iOS arrive vers 500 ms, après notre
+      // propre seuil : sans ce blocage il s'ouvre par-dessus la barre qu'on
+      // vient d'afficher, et c'est lui qui reçoit le doigt.
+      onContextMenu={(event) => event.preventDefault()}
     >
       <div
         className="t-morph nc-reaction-morph"
@@ -122,21 +134,29 @@ export function ReactionPicker({
           aria-label={active ? `${label} — ${active.label}` : label}
           aria-haspopup="menu"
           aria-expanded={open}
-          onPointerDown={() => {
+          onPointerDown={(event) => {
             if (fine() || disabled) return;
             // Appui long au doigt : ouvre la barre. Le clic qui suit le relâché
             // est neutralisé, sinon on poserait un « J'aime » en ouvrant.
+            pressOrigin.current = { x: event.clientX, y: event.clientY };
             pressTimer.current = window.setTimeout(() => {
               suppressClick.current = true;
               setOpen(true);
             }, LONG_PRESS_MS);
           }}
-          onPointerUp={() => {
-            if (pressTimer.current !== null) window.clearTimeout(pressTimer.current);
+          onPointerMove={(event) => {
+            // Un doigt qui part de plus de dix pixels est en train de faire
+            // défiler le fil, pas d'appuyer longuement. Sans ce seuil, la barre
+            // s'ouvre au milieu d'un scroll amorcé sur le bouton.
+            const origin = pressOrigin.current;
+            if (origin === null) return;
+            const moved =
+              Math.abs(event.clientX - origin.x) > MOVE_TOLERANCE_PX ||
+              Math.abs(event.clientY - origin.y) > MOVE_TOLERANCE_PX;
+            if (moved) cancelPress();
           }}
-          onPointerCancel={() => {
-            if (pressTimer.current !== null) window.clearTimeout(pressTimer.current);
-          }}
+          onPointerUp={cancelPress}
+          onPointerCancel={cancelPress}
           onClick={() => {
             if (suppressClick.current) {
               suppressClick.current = false;

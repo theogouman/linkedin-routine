@@ -58,6 +58,18 @@ export default function RootLayout({
         {children}
         <Toaster
           position="top-center"
+          // L'encoche n'est PAS dans le viewport en PWA standalone : avec
+          // `viewport-fit=cover` et une barre de statut translucide, la page
+          // commence au bord haut du téléphone, et un toast posé à 16 px du haut
+          // passe sous l'heure et le capteur. `.nc-page` compense déjà pour le
+          // contenu ; le toast est monté hors de cet arbre et doit le faire pour
+          // lui-même.
+          offset={{ top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
+          mobileOffset={{
+            top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+            left: "12px",
+            right: "12px",
+          }}
           toastOptions={{
             style: {
               background: "var(--color-surface-card)",

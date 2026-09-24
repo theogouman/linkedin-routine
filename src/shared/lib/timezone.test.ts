@@ -4,6 +4,7 @@ import {
   fromZonedTime,
   localDateKey,
   minutesOfDay,
+  startOfLocalDay,
   startOfNextLocalDay,
   zonedParts,
 } from "./timezone";
@@ -90,5 +91,29 @@ describe("daysBetweenLocal", () => {
     const a = new Date("2026-07-15T21:00:00Z"); // 23 h locale le 15
     const b = new Date("2026-07-16T06:00:00Z"); // 8 h locale le 16
     expect(daysBetweenLocal(a, b, TZ)).toBe(1);
+  });
+});
+
+describe("startOfLocalDay", () => {
+  it("rend minuit de Paris, pas minuit UTC", () => {
+    // 24 septembre 17 h 20 UTC = 19 h 20 à Paris (été) ; le jour commence donc
+    // à 22 h UTC la veille.
+    const start = startOfLocalDay(new Date("2026-09-24T17:20:00Z"), "Europe/Paris");
+    expect(start.toISOString()).toBe("2026-09-23T22:00:00.000Z");
+  });
+
+  it("ne change pas de jour juste après minuit local", () => {
+    const start = startOfLocalDay(new Date("2026-09-23T22:30:00Z"), "Europe/Paris");
+    expect(start.toISOString()).toBe("2026-09-23T22:00:00.000Z");
+  });
+
+  it("suit le changement d'heure : en hiver le jour commence à 23 h UTC", () => {
+    const start = startOfLocalDay(new Date("2026-01-15T12:00:00Z"), "Europe/Paris");
+    expect(start.toISOString()).toBe("2026-01-14T23:00:00.000Z");
+  });
+
+  it("est idempotent : le début du jour d'un début de jour est lui-même", () => {
+    const once = startOfLocalDay(new Date("2026-09-24T17:20:00Z"), "Europe/Paris");
+    expect(startOfLocalDay(once, "Europe/Paris").toISOString()).toBe(once.toISOString());
   });
 });

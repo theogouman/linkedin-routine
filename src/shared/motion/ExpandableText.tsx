@@ -1,6 +1,7 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { anchorToTop } from "@/shared/lib/scroll";
 
 /**
  * transitions.dev · 01 — Card resize, appliqué au corps d'une publication.
@@ -21,12 +22,20 @@ export function ExpandableText({
   className,
   moreLabel = "Voir plus",
   lessLabel = "Voir moins",
+  anchorRef,
 }: {
   children: React.ReactNode;
   className?: string;
   moreLabel?: string;
   lessLabel?: string;
+  /**
+   * Élément à ramener en vue au repli — la carte entière, pas seulement le
+   * texte : refermer un post doit rendre son auteur et sa date, pas atterrir au
+   * milieu du paragraphe restant.
+   */
+  anchorRef?: RefObject<HTMLElement | null>;
 }) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [overflows, setOverflows] = useState(false);
   const [open, setOpen] = useState(false);
@@ -56,13 +65,18 @@ export function ExpandableText({
     window.requestAnimationFrame(() => {
       setHeight(COLLAPSED_PX);
       setOpen(false);
+      // Le haut de la carte ne bouge pas au repli : sa position est donc déjà
+      // la bonne cible, et corriger le défilement maintenant se déroule en
+      // même temps que la hauteur diminue, au lieu de sauter à la fin.
+      const anchor = anchorRef?.current ?? rootRef.current;
+      if (anchor) anchorToTop(anchor);
     });
   };
 
   const collapsed = overflows && !open;
 
   return (
-    <div className={className}>
+    <div className={className} ref={rootRef}>
       <div
         className="t-resize relative overflow-hidden"
         style={{ height: overflows ? (open ? height : COLLAPSED_PX) : undefined }}

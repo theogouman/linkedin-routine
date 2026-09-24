@@ -16,12 +16,19 @@ import {
 } from "@/modules/lists/server/repository";
 import { getIngestionProvider } from "@/modules/ingestion/providers";
 import {
+  clearPostsCursors,
   finishSyncRun,
+  readAllCursors,
   readCursor,
   recordCursorFailure,
   recordCursorSuccess,
   startSyncRun,
 } from "@/modules/ingestion/server/cursors";
+import {
+  readIngestionStart,
+  startOfToday,
+  writeIngestionStart,
+} from "@/modules/ingestion/server/start-date";
 import {
   runSync,
   type SyncPorts,
@@ -49,6 +56,7 @@ function buildPorts(): SyncPorts {
     },
 
     readCursor,
+    readAllCursors,
     recordCursorSuccess,
     recordCursorFailure,
 
@@ -164,7 +172,14 @@ export interface SyncOutcome extends SyncReport {
  * On s'arrête donc volontairement, et on dit combien il reste.
  */
 const SYNC_WALL_CLOCK_MS = readIntEnv("SYNC_BUDGET_MS", 45_000);
-const SYNC_MAX_ACCOUNTS = readIntEnv("SYNC_MAX_ACCOUNTS_PER_RUN", 60);
+/**
+ * Le plafond de comptes est large parce que ce n'est pas lui qui protège : un
+ * compte coûte environ une seconde et demie, quatre pistes en parallèle en
+ * traitent donc bien plus de soixante dans le budget. C'est l'horloge qui
+ * arrête le passage ; le plafond n'est là que pour borner un cas dégénéré où
+ * chaque appel reviendrait instantanément.
+ */
+const SYNC_MAX_ACCOUNTS = readIntEnv("SYNC_MAX_ACCOUNTS_PER_RUN", 200);
 const SYNC_CONCURRENCY = readIntEnv("SYNC_CONCURRENCY", 4);
 
 export async function synchronize(
@@ -174,8 +189,10 @@ export async function synchronize(
   const runId = await startSyncRun(scope);
 
   try {
+    const startDate = await readIngestionStart();
     const report = await runSync(getIngestionProvider(), buildPorts(), {
       now: new Date(),
+      startDate,
       initialBackfillDays: INITIAL_BACKFILL_DAYS,
       maxLookbackDays: MAX_LOOKBACK_DAYS,
       receivedCommentsWindowDays: RECEIVED_COMMENTS_WINDOW_DAYS,
@@ -274,4 +291,26 @@ export async function enrichProfiles(limit = 100): Promise<EnrichmentOutcome> {
   }
 
   return { attempted: batch.length, enriched, more: accounts.length > limit };
+}
+
+export interface RestartOutcome {
+  /** Date de départ retenue, en ISO. */
+  startDate: string;
+  /** Curseurs effacés — autant de comptes qui seront réinterrogés. */
+  cleared: number;
+}
+
+/**
+ * Repart d'une date de départ : tous les comptes redeviennent « à amorcer »,
+ * et plus rien d'antérieur à cette date ne sera jamais demandé.
+ *
+ * Aucune publication n'est supprimée. Celles déjà en base restent, et la
+ * reprise ne peut pas les dupliquer — l'insertion est dédoublonnée par
+ * identifiant fournisseur, et le statut « traité » d'un post survit.
+ */
+export async function restartIngestion(from?: Date): Promise<RestartOutcome> {
+  const startDate = from ?? startOfToday();
+  await writeIngestionStart(startDate);
+  const cleared = await clearPostsCursors();
+  return { startDate: startDate.toISOString(), cleared };
 }

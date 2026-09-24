@@ -33,7 +33,7 @@ import {
   replyToComment,
   restorePost,
 } from "@/server/engagement-service";
-import { enrichProfiles, synchronize } from "@/server/sync-service";
+import { enrichProfiles, restartIngestion, synchronize } from "@/server/sync-service";
 import { saveGenerationSettings } from "@/modules/ai/server/generate";
 import type { Effort } from "@/modules/ai/lib/model";
 
@@ -102,6 +102,31 @@ export async function refreshNow(
           ? `${report.accountsFailed} compte(s) en échec — curseurs intacts, nouvelle tentative au prochain passage.`
           : undefined,
     };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Repart d'aujourd'hui : le fil ne contiendra plus rien d'antérieur au jour même.
+ *
+ * Deux effets indissociables, d'où une seule action. La date devient la borne
+ * basse de TOUTES les fenêtres futures, et les curseurs de publications sont
+ * effacés pour que chaque compte soit réinterrogé sur cette borne — y compris
+ * ceux déjà synchronisés, dont le curseur pointerait sinon plus loin que la
+ * date qu'on vient de fixer.
+ *
+ * Rien n'est supprimé : les publications déjà récupérées restent au fil, avec
+ * leur statut. Ce qui change, c'est ce qu'on ira chercher.
+ */
+export async function restartIngestionAction(): Promise<
+  ActionResult & { startDate?: string; cleared?: number }
+> {
+  try {
+    const outcome = await restartIngestion();
+    refreshViews();
+    revalidatePath("/reglages");
+    return { ok: true, startDate: outcome.startDate, cleared: outcome.cleared };
   } catch (error) {
     return fail(error);
   }

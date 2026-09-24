@@ -114,6 +114,12 @@ export function localDateKey(date: Date, timeZone: string): string {
   return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 
+/** Minuit local du jour de `date`, en UTC. */
+export function startOfLocalDay(date: Date, timeZone: string): Date {
+  const p = zonedParts(date, timeZone);
+  return fromZonedTime({ year: p.year, month: p.month, day: p.day }, timeZone);
+}
+
 /** Minuit local du jour suivant `date`, en UTC. */
 export function startOfNextLocalDay(date: Date, timeZone: string): Date {
   const p = zonedParts(date, timeZone);

@@ -28,6 +28,18 @@ export interface FetchWindowOptions {
    * pourrait n'être vu par aucun des deux passages.
    */
   overlapMinutes?: number;
+  /**
+   * Date de départ du corpus : rien de publié avant elle n'est jamais demandé
+   * au fournisseur, sur aucun compte et à aucun moment.
+   *
+   * Distincte de `maxLookbackDays`, qui est un garde-fou de coût glissant.
+   * Celle-ci est un CHOIX : « le fil commence ce jour-là ». C'est ce qui rend
+   * l'amorçage de plusieurs centaines de comptes abordable — on demande le
+   * jour même et non sept jours — et ce qui garantit qu'un compte ajouté dans
+   * six mois ne fera pas remonter un historique que l'utilisateur n'a jamais
+   * voulu voir.
+   */
+  startDate?: Date | null;
 }
 
 export interface FetchWindow {
@@ -48,21 +60,28 @@ export function computeFetchWindow(
   const { now, initialBackfillDays, maxLookbackDays } = options;
   const overlapMs = (options.overlapMinutes ?? 10) * 60_000;
   const floor = new Date(now.getTime() - maxLookbackDays * DAY_MS);
+  const start = options.startDate ?? null;
+
+  // La date de départ s'applique APRÈS toutes les autres bornes, et ne marque
+  // jamais la fenêtre comme tronquée : `truncated` signale du contenu manqué
+  // malgré nous, alors qu'ici on a décidé de ne pas le vouloir.
+  const clamp = (since: Date): Date =>
+    start !== null && since.getTime() < start.getTime() ? start : since;
 
   if (cursor.lastSyncedAt === null) {
     const backfill = new Date(now.getTime() - initialBackfillDays * DAY_MS);
     const since = backfill.getTime() < floor.getTime() ? floor : backfill;
-    return { since, isInitial: true, truncated: false };
+    return { since: clamp(since), isInitial: true, truncated: false };
   }
 
   const withOverlap = new Date(cursor.lastSyncedAt.getTime() - overlapMs);
   if (withOverlap.getTime() < floor.getTime()) {
-    return { since: floor, isInitial: false, truncated: true };
+    return { since: clamp(floor), isInitial: false, truncated: true };
   }
   // Un curseur dans le futur (horloge décalée, restauration de sauvegarde) ne
   // doit pas produire une fenêtre vide silencieuse : on le ramène à maintenant.
   const since = withOverlap.getTime() > now.getTime() ? now : withOverlap;
-  return { since, isInitial: false, truncated: false };
+  return { since: clamp(since), isInitial: false, truncated: false };
 }
 
 /**

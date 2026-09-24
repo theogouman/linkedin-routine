@@ -34,6 +34,12 @@ function signature(scope: string, listIds: string[]): string {
   return `${scope}|${[...listIds].sort().join(",")}`;
 }
 
+/**
+ * Tours d'actualisation enchaînés au maximum pour un clic. Dimensionné sur le
+ * pire cas connu — plusieurs centaines de comptes à amorcer — avec de la marge.
+ */
+const MAX_REFRESH_ROUNDS = 12;
+
 export function FeedToolbar({
   lists,
   selectedListIds,
@@ -114,17 +120,54 @@ export function FeedToolbar({
     });
   };
 
+  /**
+   * L'actualisation s'ENCHAÎNE jusqu'à épuisement du retard.
+   *
+   * Un passage est borné par le budget de la fonction serverless : à plusieurs
+   * centaines de comptes, il s'arrête avec un reste. Demander à l'utilisateur
+   * de recliquer sept fois n'est pas un réglage, c'est une corvée — et rien ne
+   * lui dit combien de fois. On relance donc ici, côté client : chaque tour est
+   * une invocation neuve avec son propre budget, et le toast dit où l'on en est.
+   *
+   * Le plafond de tours existe pour qu'un `remaining` qui ne descendrait pas —
+   * un fournisseur qui échoue sur tous les comptes, par exemple — ne boucle pas
+   * indéfiniment.
+   */
   const refresh = () => {
     startRefresh(async () => {
-      const result = await refreshNow("all");
-      if (!result.ok) {
-        toast.error(result.message ?? "Actualisation impossible.");
-        return;
+      const id = "feed-refresh";
+      let posts = 0;
+      let comments = 0;
+      let rounds = 0;
+      let remaining = 0;
+      let warning: string | undefined;
+
+      for (;;) {
+        const result = await refreshNow("all");
+        if (!result.ok) {
+          toast.error(result.message ?? "Actualisation impossible.", { id });
+          return;
+        }
+        rounds += 1;
+        posts += result.posts ?? 0;
+        comments += result.comments ?? 0;
+        remaining = result.remaining ?? 0;
+        if (result.message) warning = result.message;
+
+        if (remaining <= 0 || rounds >= MAX_REFRESH_ROUNDS) break;
+        toast.loading(
+          `Rattrapage en cours — ${remaining} compte${remaining > 1 ? "s" : ""} restant${remaining > 1 ? "s" : ""}.`,
+          { id },
+        );
+        // Le fil se remplit sous les yeux plutôt qu'en bloc à la fin : à trois
+        // ou quatre tours, l'attente est assez longue pour qu'un écran figé
+        // ressemble à une panne.
+        router.refresh();
       }
+
       const parts: string[] = [];
-      if (result.posts) parts.push(`${result.posts} publication${result.posts > 1 ? "s" : ""}`);
-      if (result.comments) parts.push(`${result.comments} commentaire${result.comments > 1 ? "s" : ""}`);
-      const remaining = result.remaining ?? 0;
+      if (posts) parts.push(`${posts} publication${posts > 1 ? "s" : ""}`);
+      if (comments) parts.push(`${comments} commentaire${comments > 1 ? "s" : ""}`);
       toast.success(
         [
           parts.length ? `${parts.join(" · ")} récupéré(s).` : "Rien de nouveau.",
@@ -134,8 +177,9 @@ export function FeedToolbar({
         ]
           .filter(Boolean)
           .join(" "),
+        { id },
       );
-      if (result.message) toast.warning(result.message);
+      if (warning) toast.warning(warning);
       router.refresh();
     });
   };

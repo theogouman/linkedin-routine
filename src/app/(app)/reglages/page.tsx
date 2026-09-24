@@ -2,6 +2,7 @@ import { loadPolicy } from "@/modules/engagement/server/settings";
 import { getProcessStatus, loadGenerationSettings } from "@/modules/ai/server/generate";
 import { getSelfAccount } from "@/modules/lists/server/repository";
 import { getCursors, getRecentSyncRuns } from "@/modules/ingestion/server/cursors";
+import { readIngestionStart } from "@/modules/ingestion/server/start-date";
 import { countSubscriptions } from "@/modules/notifications/server/push";
 import { readEnv } from "@/shared/lib/env";
 import { PageHeader } from "@/shared/components/PageHeader";
@@ -20,15 +21,17 @@ export const metadata = { title: "Réglages — Routine" };
  * sous la ligne de flottaison.
  */
 export default async function SettingsPage() {
-  const [policy, processes, generation, self, cursors, runs, pushCount] = await Promise.all([
-    loadPolicy(),
-    getProcessStatus(),
-    loadGenerationSettings(),
-    getSelfAccount(),
-    getCursors(),
-    getRecentSyncRuns(5),
-    countSubscriptions(),
-  ]);
+  const [policy, processes, generation, self, cursors, runs, pushCount, startDate] =
+    await Promise.all([
+      loadPolicy(),
+      getProcessStatus(),
+      loadGenerationSettings(),
+      getSelfAccount(),
+      getCursors(),
+      getRecentSyncRuns(5),
+      countSubscriptions(),
+      readIngestionStart(),
+    ]);
 
   const failedCursors = cursors.filter((cursor) => cursor.consecutive_failures > 0);
 
@@ -48,6 +51,7 @@ export default async function SettingsPage() {
           timezone: policy.timezone,
         }}
         selfProfileUrl={self?.profile_url ?? null}
+        ingestionStart={startDate?.toISOString() ?? null}
         processes={processes}
         generation={generation}
         vapidPublicKey={readEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY") ?? null}

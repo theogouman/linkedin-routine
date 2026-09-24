@@ -118,3 +118,72 @@ describe("toCommentPostedLimit", () => {
     expect(toCommentPostedLimit(new Date(NOW.getTime() - 3 * DAY), NOW)).toBe("week");
   });
 });
+
+describe("computeFetchWindow — date de départ", () => {
+  const START = new Date("2026-03-17T00:00:00Z");
+
+  it("borne l'amorçage d'un compte neuf à la date de départ", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: null },
+      { ...BASE, startDate: START },
+    );
+    expect(window.isInitial).toBe(true);
+    expect(window.since.toISOString()).toBe(START.toISOString());
+  });
+
+  it("ne marque pas la fenêtre comme tronquée : c'est un choix, pas une perte", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: null },
+      { ...BASE, startDate: START },
+    );
+    expect(window.truncated).toBe(false);
+  });
+
+  it("laisse un curseur plus récent que la date de départ intact", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: new Date("2026-03-17T09:00:00Z") },
+      { ...BASE, startDate: START },
+    );
+    expect(window.since.toISOString()).toBe("2026-03-17T08:50:00.000Z");
+  });
+
+  it("remonte un curseur antérieur à la date de départ jusqu'à elle", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: new Date("2026-03-10T09:00:00Z") },
+      { ...BASE, startDate: START },
+    );
+    expect(window.since.toISOString()).toBe(START.toISOString());
+  });
+
+  it("l'emporte aussi sur le plafond de rattrapage après une longue absence", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: new Date("2025-01-01T00:00:00Z") },
+      { ...BASE, startDate: START },
+    );
+    expect(window.since.toISOString()).toBe(START.toISOString());
+    // Tronquée reste vrai : `maxLookbackDays` a bien coupé, indépendamment.
+    expect(window.truncated).toBe(true);
+  });
+
+  it("sans date de départ, rien ne change", () => {
+    const withNull = computeFetchWindow({ lastSyncedAt: null }, { ...BASE, startDate: null });
+    const without = computeFetchWindow({ lastSyncedAt: null }, BASE);
+    expect(withNull.since.toISOString()).toBe(without.since.toISOString());
+  });
+
+  it("ramène la fenêtre des commentaires reçus à la date de départ", () => {
+    const window = computeReceivedCommentsWindow(
+      { lastSyncedAt: null },
+      { ...BASE, windowDays: 30, startDate: START },
+    );
+    expect(window.since.toISOString()).toBe(START.toISOString());
+  });
+
+  it("une date de départ à 24 h se traduit par le filtre le moins cher", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: null },
+      { ...BASE, startDate: new Date(NOW.getTime() - DAY) },
+    );
+    expect(toPostedLimit(window.since, NOW)).toBe("24h");
+  });
+});

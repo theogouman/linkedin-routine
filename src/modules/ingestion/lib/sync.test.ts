@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { FakeIngestionProvider } from "../providers/fake";
-import type { FetchedComment, FetchedPost } from "../providers/types";
+import type {
+  FetchedComment,
+  FetchedPost,
+  IngestionProvider,
+} from "../providers/types";
 import type { CursorState } from "./cursor";
 import {
   postsCursorKey,
@@ -404,5 +408,110 @@ describe("budget d'un passage", () => {
     });
     expect(synced).toHaveLength(9);
     expect(new Set(synced).size).toBe(9);
+  });
+});
+
+describe("runSync — lecture groupée des curseurs", () => {
+  const BOB: SyncAccount = {
+    id: "acc-bob",
+    profileUrl: "https://www.linkedin.com/in/bob",
+    isSelf: false,
+    hasProfileMetadata: true,
+  };
+
+  it("n'interroge pas la base une fois par compte quand le port groupé existe", async () => {
+    const reads: string[] = [];
+    let bulkCalls = 0;
+    const rec = recorder([ALICE, BOB], {
+      readCursor: async (key) => {
+        reads.push(key);
+        return { lastSyncedAt: null };
+      },
+      readAllCursors: async () => {
+        bulkCalls += 1;
+        return new Map();
+      },
+    });
+
+    await runSync(new FakeIngestionProvider({}), rec.ports, { ...OPTIONS, scope: "posts" });
+
+    expect(bulkCalls).toBe(1);
+    // C'est l'invariant qui compte : à 373 comptes, ces lectures unitaires
+    // consommaient la totalité du budget avant le premier appel au scraper.
+    expect(reads).toEqual([]);
+  });
+
+  it("traite quand même tous les comptes absents de la lecture groupée", async () => {
+    const provider = new FakeIngestionProvider({
+      postsByProfile: {
+        [ALICE.profileUrl]: [post("p1")],
+        [BOB.profileUrl]: [post("p2")],
+      },
+    });
+    const rec = recorder([ALICE, BOB], { readAllCursors: async () => new Map() });
+
+    const report = await runSync(provider, rec.ports, { ...OPTIONS, scope: "posts" });
+
+    expect(report.accountsSynced).toBe(2);
+    expect(report.accountsRemaining).toBe(0);
+  });
+
+  it("ordonne toujours du curseur le plus ancien au plus récent", async () => {
+    const asked: string[] = [];
+    const provider = new FakeIngestionProvider({});
+    const rec = recorder([ALICE, BOB], {
+      readAllCursors: async () =>
+        new Map([
+          [postsCursorKey(ALICE.id), { lastSyncedAt: new Date("2026-03-17T09:00:00Z") }],
+          [postsCursorKey(BOB.id), { lastSyncedAt: new Date("2026-03-01T09:00:00Z") }],
+        ]),
+    });
+    const spy: IngestionProvider = {
+      name: provider.name,
+      fetchPostsForProfile: async (request) => {
+        asked.push(request.profileUrl);
+        return { state: "ok", posts: [] };
+      },
+      fetchCommentsForPosts: (request) => provider.fetchCommentsForPosts(request),
+    };
+
+    await runSync(spy, rec.ports, { ...OPTIONS, scope: "posts", concurrency: 1 });
+
+    expect(asked).toEqual([BOB.profileUrl, ALICE.profileUrl]);
+  });
+
+  it("retombe sur les lectures unitaires quand le port groupé n'existe pas", async () => {
+    const reads: string[] = [];
+    const rec = recorder([ALICE], {
+      readCursor: async (key) => {
+        reads.push(key);
+        return { lastSyncedAt: null };
+      },
+    });
+
+    await runSync(new FakeIngestionProvider({}), rec.ports, { ...OPTIONS, scope: "posts" });
+
+    expect(reads).toContain(postsCursorKey(ALICE.id));
+  });
+});
+
+describe("runSync — date de départ", () => {
+  it("propage la borne jusqu'à la fenêtre demandée au fournisseur", async () => {
+    const start = new Date("2026-03-17T00:00:00Z");
+    let asked: Date | null = null;
+    const rec = recorder([ALICE], { readAllCursors: async () => new Map() });
+    const fake = new FakeIngestionProvider({});
+    const provider: IngestionProvider = {
+      name: fake.name,
+      fetchPostsForProfile: async (request) => {
+        asked = request.since;
+        return { state: "ok", posts: [] };
+      },
+      fetchCommentsForPosts: (request) => fake.fetchCommentsForPosts(request),
+    };
+
+    await runSync(provider, rec.ports, { ...OPTIONS, scope: "posts", startDate: start });
+
+    expect(asked).toEqual(start);
   });
 });

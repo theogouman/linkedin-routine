@@ -57,6 +57,56 @@ export async function recordCursorFailure(key: string, reason: string): Promise<
   if (error) throw new Error(`Écriture de l'échec de curseur : ${error.message}`);
 }
 
+/**
+ * Tous les curseurs, en une seule lecture paginée.
+ *
+ * Existe parce que l'ordonnancement d'une actualisation a besoin de connaître
+ * l'ancienneté de chaque compte AVANT d'en interroger un seul. Les lire un par
+ * un faisait un aller-retour par compte : à 373 comptes, ces lectures
+ * dépassaient à elles seules le budget du passage, qui se terminait sans avoir
+ * rien récupéré.
+ *
+ * La pagination n'est pas décorative : PostgREST plafonne une réponse à 1000
+ * lignes et ne le dit pas. Sans elle, passé mille comptes, les derniers
+ * seraient vus comme jamais synchronisés et rejoués à chaque fois.
+ */
+const CURSOR_PAGE = 1000;
+
+export async function readAllCursors(): Promise<Map<string, CursorState>> {
+  const cursors = new Map<string, CursorState>();
+  for (let from = 0; ; from += CURSOR_PAGE) {
+    const rows = unwrap(
+      await db()
+        .from("sync_cursors")
+        .select("key, last_synced_at")
+        .order("key")
+        .range(from, from + CURSOR_PAGE - 1),
+      "lecture groupée des curseurs",
+    ) as Array<{ key: string; last_synced_at: string | null }>;
+    for (const row of rows) {
+      cursors.set(row.key, {
+        lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
+      });
+    }
+    if (rows.length < CURSOR_PAGE) return cursors;
+  }
+}
+
+/**
+ * Efface les curseurs de publications pour repartir d'une date de départ.
+ *
+ * Ne touche ni aux publications ni au curseur des commentaires reçus : les
+ * posts déjà en base sont dédoublonnés par identifiant fournisseur, donc une
+ * reprise ne crée pas de doublon et ne remet rien dans la file.
+ */
+export async function clearPostsCursors(): Promise<number> {
+  const rows = unwrap(
+    await db().from("sync_cursors").delete().like("key", "posts:%").select("key"),
+    "purge des curseurs de publications",
+  ) as Array<{ key: string }>;
+  return rows.length;
+}
+
 export async function getCursors(): Promise<SyncCursorRow[]> {
   return unwrap(
     await db().from("sync_cursors").select("*").order("key"),
