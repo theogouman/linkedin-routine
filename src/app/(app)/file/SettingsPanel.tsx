@@ -1,15 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertCircle, Bell, ChevronDown, FileText, LogOut } from "lucide-react";
-import { savePolicyAction, setSelfProfileAction } from "@/app/actions";
+import {
+  savePolicyAction,
+  saveSyncSettingsAction,
+  setSelfProfileAction,
+} from "@/app/actions";
 import { logout } from "@/modules/auth/server/actions";
+import {
+  NUMERIC_SYNC_SETTINGS,
+  SYNC_SETTINGS_BOUNDS,
+  type SyncSettings,
+} from "@/modules/ingestion/lib/settings";
+import { supportedTimezones } from "@/shared/lib/timezone";
 import { formatMinuteOfDay, parseMinuteOfDay, relativeTime } from "@/shared/lib/format";
 
 /**
- * Réglages : plafonds, fenêtre, compte, process IA, notifications, diagnostics.
+ * Réglages : plafonds, fenêtre, fuseau, récupération, compte, process IA,
+ * notifications, diagnostics.
  *
  * Replié par défaut. Ce sont des réglages qu'on touche une fois puis plus
  * jamais ; les laisser ouverts pousserait l'écran de la file — l'information
@@ -33,6 +44,7 @@ export interface PolicyView {
 
 export function SettingsPanel({
   policy,
+  syncSettings,
   selfProfileUrl,
   processes,
   vapidPublicKey,
@@ -41,6 +53,7 @@ export function SettingsPanel({
   failedCursors,
 }: {
   policy: PolicyView;
+  syncSettings: SyncSettings;
   selfProfileUrl: string | null;
   processes: Array<{ kind: string; file: string; placeholder: boolean }>;
   vapidPublicKey: string | null;
@@ -67,7 +80,19 @@ export function SettingsPanel({
   const [days, setDays] = useState(policy.window.days);
   const [start, setStart] = useState(formatMinuteOfDay(policy.window.startMinute));
   const [end, setEnd] = useState(formatMinuteOfDay(policy.window.endMinute));
+  const [timezone, setTimezone] = useState(policy.timezone);
+  const [sync, setSync] = useState<SyncSettings>(syncSettings);
   const [profileUrl, setProfileUrl] = useState(selfProfileUrl ?? "");
+
+  // Calculée une fois : la liste complète des fuseaux d'ICU tient en quelques
+  // centaines d'entrées, mais la reconstruire à chaque frappe ferait ramer le
+  // panneau sur mobile.
+  const timezones = useMemo(() => {
+    const values = supportedTimezones();
+    // Le fuseau enregistré peut manquer d'une liste tronquée : sans ça, le
+    // `select` afficherait silencieusement autre chose que la valeur réelle.
+    return values.includes(policy.timezone) ? values : [policy.timezone, ...values];
+  }, [policy.timezone]);
 
   const savePolicy = () => {
     const startMinute = parseMinuteOfDay(start);
@@ -81,9 +106,19 @@ export function SettingsPanel({
         caps,
         delayMinutes: delay,
         maxCommentsPerHour: perHour,
+        timezone,
         window: { days, startMinute, endMinute, middayPause: policy.window.middayPause },
       });
       if (result.ok) toast.success("Réglages enregistrés.");
+      else toast.error(result.message ?? "Enregistrement impossible.");
+      router.refresh();
+    });
+  };
+
+  const saveSync = () => {
+    startTransition(async () => {
+      const result = await saveSyncSettingsAction(sync);
+      if (result.ok) toast.success("Récupération enregistrée.");
       else toast.error(result.message ?? "Enregistrement impossible.");
       router.refresh();
     });
@@ -173,7 +208,7 @@ export function SettingsPanel({
 
           <Block
             title="Plafonds journaliers"
-            hint={`Appliqués après le facteur de montée en charge. Fuseau : ${policy.timezone}.`}
+            hint="Appliqués après le facteur de montée en charge."
           >
             <div className="grid grid-cols-3 gap-2">
               <NumberField label="Commentaires" value={caps.comments} onChange={(v) => setCaps({ ...caps, comments: v })} />
@@ -227,9 +262,56 @@ export function SettingsPanel({
             ) : null}
           </Block>
 
+          <Block
+            title="Fuseau horaire"
+            hint="Référence des plafonds journaliers et de la fenêtre d'émission."
+          >
+            <select
+              value={timezone}
+              onChange={(event) => setTimezone(event.target.value)}
+              className="nc-input"
+              aria-label="Fuseau horaire"
+            >
+              {timezones.map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone}
+                </option>
+              ))}
+            </select>
+          </Block>
+
           <button type="button" onClick={savePolicy} disabled={pending} className="nc-btn nc-btn--primary">
             {pending ? "Enregistrement…" : "Enregistrer les réglages"}
           </button>
+
+          <Block
+            title="Récupération"
+            hint="Profondeur des passages et garde-fous de coût. Chaque publication ou commentaire récupéré est facturé par le fournisseur."
+          >
+            <div className="grid grid-cols-2 gap-2">
+              {NUMERIC_SYNC_SETTINGS.map((key) => {
+                const bound = SYNC_SETTINGS_BOUNDS[key];
+                return (
+                  <NumberField
+                    key={key}
+                    label={`${bound.label} (${bound.unit})`}
+                    value={sync[key]}
+                    min={bound.min}
+                    max={bound.max}
+                    onChange={(value) => setSync({ ...sync, [key]: value })}
+                  />
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={saveSync}
+              disabled={pending}
+              className="nc-btn nc-btn--primary mt-3"
+            >
+              {pending ? "Enregistrement…" : "Enregistrer la récupération"}
+            </button>
+          </Block>
 
           <Block title="Process de génération" hint="Fichiers Markdown versionnés dans le dépôt.">
             <ul className="flex flex-col gap-1.5">
@@ -334,10 +416,14 @@ function NumberField({
   label,
   value,
   onChange,
+  min = 1,
+  max,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  min?: number;
+  max?: number;
 }) {
   return (
     <label className="flex flex-col gap-1">
@@ -347,10 +433,13 @@ function NumberField({
       <input
         type="number"
         inputMode="numeric"
-        min={1}
+        min={min}
+        max={max}
         value={value}
         onChange={(event) => {
           const next = Number.parseInt(event.target.value, 10);
+          // Hors bornes, on laisse passer : le serveur renverra un message qui
+          // nomme la borne, plutôt qu'un champ qui refuse la frappe en silence.
           if (Number.isFinite(next) && next > 0) onChange(next);
         }}
         className="nc-input"

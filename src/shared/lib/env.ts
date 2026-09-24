@@ -35,27 +35,19 @@ export function readBoolEnv(name: string, fallback: boolean): boolean {
   return raw === "1" || raw.toLowerCase() === "true";
 }
 
-/** Fuseau de référence pour les plafonds et la fenêtre diurne (FR-017). */
+/**
+ * Fuseau de référence des plafonds et de la fenêtre diurne (FR-017).
+ *
+ * Amorce seulement : le fuseau effectif se règle dans l'app et vit en base
+ * (`queue_policy`). Cette variable ne sert qu'aux déploiements qui n'ont
+ * encore jamais enregistré de réglage.
+ */
 export const APP_TIMEZONE = readEnv("APP_TIMEZONE") ?? "Europe/Paris";
 
 /**
- * Profondeur de récupération au premier passage sur un compte nouvellement
- * ajouté (FR-003, point tranché en clarification). 7 jours par défaut :
- * assez pour que le fil ne soit pas vide à l'ajout, assez court pour que
- * l'amorçage de 100+ comptes reste marginal en coût.
+ * Les profondeurs de récupération et les garde-fous de coût ne sont plus lus
+ * ici : ils vivent en base et se règlent depuis l'app
+ * (`src/modules/ingestion/lib/settings.ts`). Les variables d'environnement
+ * correspondantes ne subsistent que comme valeurs de départ, lues une seule
+ * fois par `loadSyncSettings` tant qu'aucun réglage n'a été enregistré.
  */
-export const INITIAL_BACKFILL_DAYS = readIntEnv("INITIAL_BACKFILL_DAYS", 7);
-
-/** Fenêtre glissante des commentaires reçus (FR-008). */
-export const RECEIVED_COMMENTS_WINDOW_DAYS = readIntEnv(
-  "RECEIVED_COMMENTS_WINDOW_DAYS",
-  30,
-);
-
-/**
- * Garde-fou : même après une longue absence, on ne redemande jamais plus que
- * cette profondeur au fournisseur. Le curseur peut être très ancien (app non
- * ouverte pendant des mois) ; sans plafond, une seule actualisation pourrait
- * coûter des dizaines d'euros.
- */
-export const MAX_LOOKBACK_DAYS = readIntEnv("MAX_LOOKBACK_DAYS", 90);

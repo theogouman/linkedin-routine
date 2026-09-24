@@ -1,8 +1,10 @@
 # Guide — générer toutes les variables d'environnement
 
-Douze variables obligatoires, sept optionnelles. Quatre se génèrent en une
-commande, huit se récupèrent sur des comptes tiers, le reste a des valeurs par
-défaut qui conviennent.
+Douze variables obligatoires. Quatre se génèrent en une commande, huit se
+récupèrent sur des comptes tiers. Tout le reste a des valeurs par défaut qui
+conviennent, et les réglages qu'on a réellement envie de bouger — profondeur de
+récupération, garde-fous de coût, fuseau — ne sont pas des variables du tout :
+ils se modifient depuis l'app (§6).
 
 ## Raccourci — les quatre générables d'un coup
 
@@ -86,6 +88,7 @@ si `HIST_IGNORE_SPACE` est actif.
 | `APIFY_TOKEN` | oui | console Apify |
 | `UNIPILE_DSN` · `UNIPILE_API_KEY` · `UNIPILE_ACCOUNT_ID` | oui | console Unipile |
 | `ANTHROPIC_API_KEY` | oui | console Anthropic |
+| réglages de récupération et fuseau | non | **se règlent dans l'app** (§6) |
 | tout le reste | non | valeurs par défaut |
 
 ---
@@ -313,20 +316,38 @@ changer de modèle.
 
 ---
 
-## 6. Les réglages — tous optionnels
+## 6. Les réglages — dans l'app, pas dans l'environnement
 
-```bash
-APP_TIMEZONE=Europe/Paris          # fuseau des plafonds et de la fenêtre d'envoi
-INITIAL_BACKFILL_DAYS=7            # profondeur du 1er passage sur un compte ajouté
-RECEIVED_COMMENTS_WINDOW_DAYS=30   # fenêtre glissante des commentaires reçus
-MAX_LOOKBACK_DAYS=90               # plafond de rattrapage après une longue absence
-MAX_POSTS_PER_ACCOUNT=20           # garde-fou de coût, par appel
-MAX_COMMENTS_PER_POST=50           # garde-fou de coût, par appel
-```
+**Tu n'as rien à renseigner ici.** Les six réglages de récupération se modifient
+depuis le téléphone et vivent en base, comme les plafonds d'envoi :
 
-Les plafonds d'envoi, la cadence et la fenêtre diurne ne sont **pas** ici : ils
-se règlent dans l'app (**File ▸ Réglages**) et vivent en base, pour être
-modifiables depuis le téléphone sans redéployer.
+| Réglage | Où | Bornes |
+|---|---|---|
+| Fuseau horaire | File ▸ Réglages ▸ **Fuseau horaire** | tous les fuseaux connus d'`Intl` |
+| Historique à l'ajout | File ▸ Réglages ▸ **Récupération** | 1 – 365 jours |
+| Rattrapage maximal | idem | 1 – 365 jours |
+| Fenêtre commentaires | idem | 1 – 365 jours |
+| Publ. / compte, par appel | idem | 1 – 200 |
+| Comm. / publication, par appel | idem | 1 – 500 |
+
+Le fuseau part avec le bouton « Enregistrer les réglages », les cinq autres avec
+« Enregistrer la récupération ».
+
+Deux garde-fous à la validation : l'historique à l'ajout ne peut pas dépasser le
+rattrapage maximal (il serait tronqué en silence), et aucune valeur ne peut
+tomber à zéro — ce qui désactiverait la récupération sans le dire.
+
+### Les variables d'environnement correspondantes
+
+`APP_TIMEZONE`, `INITIAL_BACKFILL_DAYS`, `RECEIVED_COMMENTS_WINDOW_DAYS`,
+`MAX_LOOKBACK_DAYS`, `MAX_POSTS_PER_ACCOUNT` et `MAX_COMMENTS_PER_POST`
+existent toujours, mais seulement comme **valeurs de départ** : elles sont lues
+tant qu'aucun réglage n'a jamais été enregistré depuis l'app. Après le premier
+enregistrement, la base prime définitivement et modifier une de ces variables
+n'a plus d'effet. Laisse-les vides.
+
+Les plafonds d'envoi, la cadence et la fenêtre diurne n'ont jamais été ici : eux
+aussi se règlent dans **File ▸ Réglages**.
 
 ### `INGESTION_PROVIDER`, `WRITE_PROVIDER`
 

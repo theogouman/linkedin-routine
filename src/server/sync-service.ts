@@ -1,11 +1,5 @@
 import "server-only";
 
-import {
-  INITIAL_BACKFILL_DAYS,
-  MAX_LOOKBACK_DAYS,
-  RECEIVED_COMMENTS_WINDOW_DAYS,
-  readIntEnv,
-} from "@/shared/lib/env";
 import { insertNewPosts, getOwnPostsSince } from "@/modules/feed/server/repository";
 import { insertNewComments, mapProviderCommentIds } from "@/modules/inbox/server/repository";
 import {
@@ -14,6 +8,8 @@ import {
   updateAccountProfile,
 } from "@/modules/lists/server/repository";
 import { getIngestionProvider } from "@/modules/ingestion/providers";
+import { loadSyncSettings } from "@/modules/ingestion/server/settings";
+import type { SyncSettings } from "@/modules/ingestion/lib/settings";
 import {
   finishSyncRun,
   readCursor,
@@ -35,7 +31,7 @@ import {
  * récupération sont branchés ensemble.
  */
 
-function buildPorts(): SyncPorts {
+function buildPorts(settings: SyncSettings): SyncPorts {
   return {
     listAccounts: async () => {
       const accounts = await getSyncableAccounts();
@@ -95,7 +91,7 @@ function buildPorts(): SyncPorts {
       // fournisseur ; un commentaire dont le post n'est pas en base est
       // ignoré plutôt que de créer une publication fantôme.
       const ownPosts = await getOwnPostsSince(
-        new Date(Date.now() - RECEIVED_COMMENTS_WINDOW_DAYS * 86_400_000),
+        new Date(Date.now() - settings.receivedCommentsWindowDays * 86_400_000),
       );
       const postIdByProviderId = new Map(
         ownPosts.map((post) => [post.provider_post_id, post.id]),
@@ -152,16 +148,15 @@ export async function synchronize(
   scope: "all" | "posts" | "comments" = "all",
 ): Promise<SyncOutcome> {
   const startedAt = Date.now();
+  // Lus une fois par passage : toutes les fenêtres d'une même actualisation
+  // doivent raisonner sur les mêmes bornes, même si le réglage change pendant.
+  const settings = await loadSyncSettings();
   const runId = await startSyncRun(scope);
 
   try {
-    const report = await runSync(getIngestionProvider(), buildPorts(), {
+    const report = await runSync(getIngestionProvider(), buildPorts(settings), {
       now: new Date(),
-      initialBackfillDays: INITIAL_BACKFILL_DAYS,
-      maxLookbackDays: MAX_LOOKBACK_DAYS,
-      receivedCommentsWindowDays: RECEIVED_COMMENTS_WINDOW_DAYS,
-      maxPostsPerAccount: readIntEnv("MAX_POSTS_PER_ACCOUNT", 20),
-      maxCommentsPerPost: readIntEnv("MAX_COMMENTS_PER_POST", 50),
+      ...settings,
       scope,
     });
 

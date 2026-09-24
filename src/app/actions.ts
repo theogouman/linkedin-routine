@@ -18,6 +18,8 @@ import {
 import { canResume } from "@/modules/engagement/lib/circuit";
 import { POST_BREAKER_START_FACTOR } from "@/modules/engagement/lib/policy";
 import { savePolicy } from "@/modules/engagement/server/settings";
+import { saveSyncSettings } from "@/modules/ingestion/server/settings";
+import type { SyncSettings } from "@/modules/ingestion/lib/settings";
 import { QueueSuspendedError } from "@/modules/engagement/server/queue";
 import {
   commentOnPost,
@@ -361,6 +363,7 @@ export async function savePolicyAction(patch: {
   caps?: { comments?: number; likes?: number; total?: number };
   delayMinutes?: { min?: number; max?: number };
   maxCommentsPerHour?: number;
+  timezone?: string;
   window?: {
     days?: number[];
     startMinute?: number;
@@ -370,6 +373,25 @@ export async function savePolicyAction(patch: {
 }): Promise<ActionResult> {
   try {
     await savePolicy(patch as never);
+    revalidatePath("/file");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Réglages de récupération (FR-003, FR-008 et garde-fous de coût).
+ *
+ * Ils changeaient autrefois par variable d'environnement, donc par
+ * redéploiement. Les passer en base, c'est accepter de les régler depuis le
+ * téléphone — exactement comme les plafonds d'envoi.
+ */
+export async function saveSyncSettingsAction(
+  patch: Partial<SyncSettings>,
+): Promise<ActionResult> {
+  try {
+    await saveSyncSettings(patch);
     revalidatePath("/file");
     return { ok: true };
   } catch (error) {

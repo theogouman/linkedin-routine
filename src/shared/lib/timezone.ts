@@ -136,3 +136,52 @@ export function daysBetweenLocal(a: Date, b: Date, timeZone: string): number {
   const ub = Date.UTC(pb.year, pb.month - 1, pb.day);
   return Math.round((ub - ua) / 86_400_000);
 }
+
+/**
+ * Un fuseau est valide si `Intl` sait en construire un formateur.
+ *
+ * C'est la seule vérification qui vaille : la liste des fuseaux dépend de la
+ * version d'ICU embarquée, pas d'une table qu'on maintiendrait ici. Un fuseau
+ * accepté par ce test est un fuseau que toute l'arithmétique de cadence saura
+ * manipuler.
+ */
+export function isValidTimezone(value: unknown): value is string {
+  if (typeof value !== "string" || value.trim() === "") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fuseaux proposés dans les réglages.
+ *
+ * `Intl.supportedValuesOf` donne la liste complète quand le moteur la connaît ;
+ * sinon on retombe sur une poignée de fuseaux plausibles pour l'usage réel de
+ * l'app, plutôt que de présenter un champ vide.
+ */
+export function supportedTimezones(): string[] {
+  const withSupported = Intl as typeof Intl & {
+    supportedValuesOf?: (key: string) => string[];
+  };
+  try {
+    const values = withSupported.supportedValuesOf?.("timeZone");
+    if (values && values.length > 0) return values;
+  } catch {
+    // Moteur sans `supportedValuesOf` : on passe au repli.
+  }
+  return [
+    "Europe/Paris",
+    "Europe/London",
+    "Europe/Brussels",
+    "Europe/Zurich",
+    "Europe/Lisbon",
+    "Europe/Madrid",
+    "America/New_York",
+    "America/Los_Angeles",
+    "America/Montreal",
+    "UTC",
+  ];
+}

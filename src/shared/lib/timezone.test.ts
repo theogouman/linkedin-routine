@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   daysBetweenLocal,
   fromZonedTime,
+  isValidTimezone,
   localDateKey,
   minutesOfDay,
   startOfNextLocalDay,
+  supportedTimezones,
   zonedParts,
 } from "./timezone";
 
@@ -90,5 +92,38 @@ describe("daysBetweenLocal", () => {
     const a = new Date("2026-07-15T21:00:00Z"); // 23 h locale le 15
     const b = new Date("2026-07-16T06:00:00Z"); // 8 h locale le 16
     expect(daysBetweenLocal(a, b, TZ)).toBe(1);
+  });
+});
+
+describe("isValidTimezone", () => {
+  it.each(["Europe/Paris", "UTC", "America/New_York"])("accepte %s", (zone) => {
+    expect(isValidTimezone(zone)).toBe(true);
+  });
+
+  it.each([
+    ["un fuseau inventé", "Europe/Atlantide"],
+    ["une chaîne vide", ""],
+    ["des espaces", "   "],
+    ["un nombre", 42],
+    ["null", null],
+    ["undefined", undefined],
+  ])("refuse %s", (_label, value) => {
+    expect(isValidTimezone(value)).toBe(false);
+  });
+});
+
+describe("supportedTimezones", () => {
+  it("propose une liste non vide", () => {
+    expect(supportedTimezones().length).toBeGreaterThan(0);
+  });
+
+  it("ne propose que des fuseaux que l'arithmétique sait manipuler", () => {
+    for (const zone of supportedTimezones()) {
+      expect(isValidTimezone(zone)).toBe(true);
+    }
+  });
+
+  it("contient le fuseau par défaut de l'app", () => {
+    expect(supportedTimezones()).toContain("Europe/Paris");
   });
 });

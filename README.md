@@ -32,7 +32,10 @@ npm run dev
 ```
 
 Les huit variables restantes viennent de comptes tiers : pas à pas dans
-[`docs/VARIABLES-ENV.md`](docs/VARIABLES-ENV.md).
+[`docs/VARIABLES-ENV.md`](docs/VARIABLES-ENV.md). Tout ce qui se règle au
+quotidien — plafonds d'envoi, cadence, fenêtre diurne, fuseau, profondeur de
+récupération et garde-fous de coût — n'est pas dans l'environnement : ça vit en
+base et se modifie depuis le téléphone, dans **File ▸ Réglages**.
 
 Pour développer sans compte Apify ni compte Unipile — donc sans budget et sans
 risque d'envoyer un vrai commentaire :
@@ -48,7 +51,7 @@ applique-le sur ton projet Supabase avant le premier lancement.
 
 ```bash
 npm run check     # typecheck + lint + tests
-npm test          # 196 tests unitaires
+npm test          # 236 tests unitaires
 npm run build     # build de production
 ```
 

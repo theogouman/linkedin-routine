@@ -37,9 +37,10 @@ reçus s'ajoutent au même tarif. Les partages ne sont jamais demandés (donc
 jamais facturés) et le pré-filtre `postedLimit` évite de payer pour du contenu
 antérieur au curseur.
 
-Trois garde-fous de coût sont configurables : `MAX_POSTS_PER_ACCOUNT`,
-`MAX_COMMENTS_PER_POST` et `MAX_LOOKBACK_DAYS` (profondeur maximale demandée
-après une longue absence).
+Trois garde-fous de coût se règlent dans l'app — **File ▸ Réglages ▸
+Récupération** : publications par compte et par appel, commentaires par
+publication et par appel, et profondeur maximale demandée après une longue
+absence. Ils vivent en base : les ajuster ne demande aucun redéploiement.
 
 ## 3. Écriture (Unipile)
 
