@@ -73,4 +73,46 @@ export async function drain(options: { limit?: number } = {}): Promise<DrainRepo
   return drainQueue(ports, options);
 }
 
+/**
+ * Intervalle minimal entre deux purges opportunistes sur une même instance.
+ *
+ * Sans lui, chaque navigation déclencherait une requête de plus ; avec lui,
+ * une session d'engagement de dix minutes en déclenche une dizaine au maximum.
+ */
+const OPPORTUNISTIC_INTERVAL_MS = 60_000;
+let lastOpportunisticRun = 0;
+
+/**
+ * Purge déclenchée par l'activité de l'utilisateur, en plus de l'ordonnanceur.
+ *
+ * Deux raisons d'exister :
+ *
+ *  1. **Le plan Hobby de Vercel n'autorise qu'un cron par jour.** L'ordonnanceur
+ *     fin vit donc ailleurs (pg_cron côté Supabase, cf. migration 002). Cette
+ *     purge-ci est le filet : même sans aucun ordonnanceur configuré, ouvrir
+ *     l'app fait partir ce qui est dû.
+ *  2. Elle rend l'app cohérente avec ce que l'utilisateur voit. Il ouvre le
+ *     fil, la file se vide en arrière-plan, les compteurs sont justes.
+ *
+ * Elle ne peut pas accélérer les envois : la politique (plafonds, délai
+ * aléatoire, fenêtre diurne) est réappliquée à chaque passage. Visiter la file
+ * plus souvent ne fait jamais partir plus d'actions — c'est ce qui rend ce
+ * déclenchement opportuniste sûr par construction.
+ *
+ * Silencieuse par conception : une panne du fournisseur d'écriture ne doit pas
+ * transformer l'affichage du fil en écran d'erreur. L'échec est déjà enregistré
+ * en base et visible dans la file.
+ */
+export async function drainOpportunistically(): Promise<void> {
+  const now = Date.now();
+  if (now - lastOpportunisticRun < OPPORTUNISTIC_INTERVAL_MS) return;
+  lastOpportunisticRun = now;
+
+  try {
+    await drainQueue(ports, { limit: 1 });
+  } catch {
+    // Volontairement avalé — cf. commentaire ci-dessus.
+  }
+}
+
 export { ports as queuePorts };

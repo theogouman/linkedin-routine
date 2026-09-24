@@ -88,12 +88,73 @@ oubliée au déploiement ne doit pas ouvrir l'app.
 lui elles répondent 503 — refuser plutôt qu'ouvrir, puisqu'elles déclenchent
 des envois sur le compte LinkedIn et des appels facturés.
 
-[`vercel.json`](../vercel.json) déclare deux tâches :
+### Le plan Hobby de Vercel n'autorise qu'un cron par jour
 
-| Route | Fréquence | Rôle |
-|---|---|---|
-| `/api/cron/drain` | toutes les 5 min | Purge la file d'envoi. Quasi vide à chaque passage : la cadence vient de la politique, pas de la fréquence |
-| `/api/cron/notify` | 7 h et 16 h UTC | Vérifie les nouveautés et envoie la notification (FR-014) |
+C'est la contrainte qui décide de toute cette section. Un
+`*/5 * * * *` dans `vercel.json` fait **échouer le déploiement** :
+
+> Hobby accounts are limited to daily cron jobs. This cron expression
+> (`*/5 * * * *`) would run more than once per day.
+
+Le message parle de **fréquence**, pas de quota : aucun autre projet ne
+« consomme » quoi que ce soit, c'est l'expression elle-même qui est refusée.
+
+Or la file d'écriture doit être visitée toutes les quelques minutes. Non pour
+envoyer davantage — la cadence (3 à 12 min de délai aléatoire, plafonds,
+fenêtre diurne) est réappliquée à chaque passage et ne laisse jamais partir
+plus que prévu — mais parce qu'un passage quotidien enverrait deux actions par
+jour et la file ne se viderait jamais.
+
+D'où la répartition en trois étages :
+
+| Déclencheur | Fréquence | Rôle | Où |
+|---|---|---|---|
+| Cron Vercel | 1×/jour, 7 h UTC | Vérification des nouveautés + notification | [`vercel.json`](../vercel.json) |
+| **pg_cron (Supabase)** | **toutes les 5 min** | **Purge de la file d'écriture** | [`supabase/migrations/002_drain_schedule.sql`](../supabase/migrations/002_drain_schedule.sql) |
+| pg_cron (Supabase) | 1×/jour, 16 h UTC | Seconde vérification, pour tenir les 2/jour de FR-014 | idem |
+| Ouverture de l'app | à chaque session | Filet : fait partir ce qui est dû même sans ordonnanceur | `after()` dans le layout |
+
+#### Mettre en place pg_cron
+
+Console Supabase → **SQL Editor** → colle
+[`002_drain_schedule.sql`](../supabase/migrations/002_drain_schedule.sql) après
+y avoir remplacé `<APP_URL>` et `<CRON_SECRET>` → **Run**.
+
+Vérification :
+
+```sql
+select jobname, schedule, active from cron.job;
+select jobname, status, return_message, start_time
+  from cron.job_run_details order by start_time desc limit 10;
+select id, status_code, created from net._http_response order by id desc limit 10;
+```
+
+Un `status_code` 200 dans `net._http_response` signifie que la purge répond.
+Un 401 signifie que le `cron_secret` de la table `drain_config` ne correspond
+pas à la variable `CRON_SECRET` de Vercel.
+
+Changer l'URL ou le secret plus tard ne demande pas de reprogrammer le job :
+
+```sql
+update drain_config set app_url = '…', cron_secret = '…' where id = 1;
+```
+
+#### Les autres options
+
+- **GitHub Actions** — [`.github/workflows/drain-queue.yml`](../.github/workflows/drain-queue.yml),
+  déjà écrit. Gratuit, mais le cron de GitHub est « best effort » : un
+  déclenchement prévu toutes les 5 min arrive souvent avec 10 à 20 min de
+  retard. Sans conséquence ici (les envois partent plus tard, jamais plus
+  vite), mais pg_cron est plus net. Définis les secrets `APP_URL` et
+  `CRON_SECRET` du dépôt pour l'activer ; sans eux, le job se termine
+  proprement sans rien appeler.
+- **Plan Pro Vercel** (~20 $/mois) — remets simplement le cron `*/5` dans
+  `vercel.json` et supprime le job pg_cron. C'est la seule option qui coûte de
+  l'argent, et elle n'apporte rien de plus que pg_cron ici.
+- **Ne rien mettre du tout** — l'app reste fonctionnelle : la purge
+  opportuniste fait partir ce qui est dû à chaque ouverture. Mais rien ne part
+  quand l'app est fermée, donc une file constituée le soir attend le lendemain.
+  Acceptable pour tester, pas en régime.
 
 ## 8. Installation sur iPhone
 

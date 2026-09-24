@@ -2,14 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "comment": "Purge de la file d'écriture. Fréquent mais quasi vide : la cadence (3-12 min entre deux envois) vient de la politique, pas d'ici.",
-      "path": "/api/cron/drain",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "comment": "Vérification serveur des nouveautés + notification push (FR-014). Deux fois par jour, en UTC : 7h et 16h UTC ≈ 8h/9h et 17h/18h à Paris.",
+      "comment": "Vérification serveur des nouveautés + notification push (FR-014). Une fois par jour : c'est la seule cadence qu'autorise le plan Hobby, et elle suffit — FR-014 demande 2 vérifications/jour, la seconde est assurée par l'actualisation à l'ouverture de l'app.",
       "path": "/api/cron/notify",
-      "schedule": "0 7,16 * * *"
+      "schedule": "0 7 * * *"
     }
   ]
 }

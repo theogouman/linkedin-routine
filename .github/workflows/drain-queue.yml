@@ -1,0 +1,60 @@
+# Ordonnanceur de secours pour la file d'écriture.
+#
+# À n'utiliser QUE si tu ne veux pas de pg_cron côté Supabase
+# (supabase/migrations/002_drain_schedule.sql), qui est la voie recommandée.
+#
+# Réserve honnête : le cron de GitHub Actions est « best effort ». Sous charge,
+# un déclenchement prévu toutes les 5 minutes arrive régulièrement avec 10 à
+# 20 minutes de retard, parfois davantage. Pour cette app ce n'est pas grave —
+# les envois partent plus tard, jamais plus vite, la cadence reste respectée —
+# mais pg_cron tient la minute et ne coûte rien de plus.
+#
+# Activation : définis les deux secrets du dépôt
+#   APP_URL      ex. https://linkedin-routine.vercel.app (sans / final)
+#   CRON_SECRET  la même valeur que la variable CRON_SECRET de Vercel
+# Tant qu'ils sont absents, le job se termine proprement sans rien appeler.
+
+name: Purge de la file d'écriture
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  # Deux purges simultanées ne peuvent pas envoyer deux fois la même action
+  # (le verrou est en base), mais les faire se chevaucher n'apporte rien.
+  group: drain-write-queue
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Appeler l'endpoint de purge
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Secrets APP_URL ou CRON_SECRET absents — ordonnanceur inactif."
+            echo "C'est le comportement attendu si tu utilises pg_cron à la place."
+            exit 0
+          fi
+
+          code=$(curl -sS -o /tmp/response.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 60 \
+            "$APP_URL/api/cron/drain")
+
+          echo "HTTP $code"
+          cat /tmp/response.json
+
+          # 401 ou 503 = mauvaise configuration, pas une panne passagère :
+          # on fait échouer le job pour que ça remonte, plutôt que d'accumuler
+          # des appels refusés en silence pendant des jours.
+          if [ "$code" = "401" ] || [ "$code" = "503" ]; then
+            echo "::error::CRON_SECRET incorrect ou non configuré côté Vercel."
+            exit 1
+          fi
