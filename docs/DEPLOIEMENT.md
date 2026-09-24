@@ -143,12 +143,31 @@ update drain_config
  where id = 1;
 ```
 
-> ⚠️ **Deployment Protection.** Si la protection SSO de Vercel est active sur
-> le domaine visé, ces appels reçoivent une redirection d'authentification au
-> lieu de la route, et rien ne part jamais. Trois issues : la désactiver,
-> pointer `app_url` sur un domaine personnalisé (la protection
-> « all except custom domains » les épargne), ou ajouter un
-> **Protection Bypass for Automation**.
+#### Deployment Protection : preview uniquement
+
+La protection Vercel (« Vercel Authentication ») doit être réglée sur
+**Preview**, pas sur *All Deployments*. Si elle couvre la production :
+
+- pg_cron reçoit une redirection d'authentification au lieu de la route, et
+  **rien ne part jamais** ;
+- et surtout, **la PWA elle-même devient inutilisable** : sur iPhone, l'app
+  installée heurterait un mur d'authentification Vercel avant même d'atteindre
+  l'écran de mot de passe.
+
+Le *Protection Bypass for Automation* résoudrait le premier point mais pas le
+second. Sans domaine personnalisé, la production doit donc être ouverte au
+réseau — ce qui est sans conséquence, puisque c'est l'app qui se protège :
+
+| Ce qui reste public | Pourquoi c'est sans risque |
+|---|---|
+| `/login` | Formulaire de mot de passe ; c'est la porte |
+| `/manifest.webmanifest`, `/sw.js`, `/offline`, `/icons/*`, `/_next/*` | Statiques, aucun contenu |
+| `/api/cron/*` | Répond 401 sans le `CRON_SECRET`, 503 s'il n'est pas configuré |
+
+Tout le reste est fermé par le middleware, qui ferme **par défaut** : on y
+liste ce qui est public, jamais ce qui est protégé, pour qu'une route ajoutée
+demain le soit sans qu'on y pense. Un test
+(`src/middleware-surface.test.ts`) fige cette liste.
 
 Vérification :
 
