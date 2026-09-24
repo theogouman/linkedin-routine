@@ -124,7 +124,17 @@ export function FeedToolbar({
       const parts: string[] = [];
       if (result.posts) parts.push(`${result.posts} publication${result.posts > 1 ? "s" : ""}`);
       if (result.comments) parts.push(`${result.comments} commentaire${result.comments > 1 ? "s" : ""}`);
-      toast.success(parts.length ? `${parts.join(" · ")} récupéré(s).` : "Rien de nouveau.");
+      const remaining = result.remaining ?? 0;
+      toast.success(
+        [
+          parts.length ? `${parts.join(" · ")} récupéré(s).` : "Rien de nouveau.",
+          remaining > 0
+            ? `${remaining} compte${remaining > 1 ? "s" : ""} restant${remaining > 1 ? "s" : ""} — relance pour continuer.`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
       if (result.message) toast.warning(result.message);
       router.refresh();
     });

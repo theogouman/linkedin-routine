@@ -143,5 +143,6 @@ export interface SyncRunRow {
   accounts_failed: number;
   posts_inserted: number;
   comments_inserted: number;
+  accounts_remaining: number;
   error: string | null;
 }

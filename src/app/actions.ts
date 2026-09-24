@@ -75,16 +75,28 @@ function refreshViews(): void {
 
 export async function refreshNow(
   scope: "all" | "posts" | "comments" = "all",
-): Promise<ActionResult & { posts?: number; comments?: number; failed?: number }> {
+): Promise<
+  ActionResult & {
+    posts?: number;
+    comments?: number;
+    failed?: number;
+    remaining?: number;
+  }
+> {
   try {
     const report = await synchronize(scope);
     refreshViews();
     revalidatePath("/listes");
+    revalidatePath("/reglages");
     return {
       ok: true,
       posts: report.postsInserted,
       comments: report.commentsInserted,
       failed: report.accountsFailed,
+      // Un passage borné est la normale à plusieurs centaines de comptes : le
+      // dire est la seule façon pour l'utilisateur de savoir qu'il doit
+      // relancer, plutôt que de croire le rattrapage terminé.
+      remaining: report.accountsRemaining,
       message:
         report.errors.length > 0
           ? `${report.accountsFailed} compte(s) en échec — curseurs intacts, nouvelle tentative au prochain passage.`

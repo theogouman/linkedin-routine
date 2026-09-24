@@ -60,6 +60,8 @@ export default async function SettingsPage() {
           ok: run.ok,
           postsInserted: run.posts_inserted,
           commentsInserted: run.comments_inserted,
+          remaining: run.accounts_remaining,
+          accountsSynced: run.accounts_synced,
           error: run.error,
         }))}
         failedCursors={failedCursors.map((cursor) => ({

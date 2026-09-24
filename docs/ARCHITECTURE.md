@@ -107,13 +107,13 @@ la seconde ne touche aucune ligne.
 
 ## Tests
 
-259 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
+264 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
 
 | Sujet | Ce qui est vérifié |
 |---|---|
 | `policy` | Les plafonds ne sont jamais dépassés, la cadence est respectée, la suite d'envois est croissante et toujours dans la fenêtre |
 | `circuit` | 429, 5xx, checkpoints et sessions expirées suspendent ; une erreur banale non ; les 72 h sont opposables à la seconde |
-| `cursor` / `sync` | Un échec ne fait pas avancer le curseur ; un compte en panne n'empêche pas les autres |
+| `cursor` / `sync` | Un échec ne fait pas avancer le curseur ; un compte en panne n'empêche pas les autres ; un passage borné reprend où le précédent s'est arrêté, sans rejouer ni sauter de compte |
 | `normalize` | Partages exclus, doublons écartés, date invalide refusée plutôt que ramenée à 1970 |
 | `timezone` | Aller-retour stable sur une année, passage à l'heure d'été compris |
 | `linkedin-url` | Onze formes d'URL LinkedIn convergent vers une seule ; un identifiant opaque garde sa casse |
@@ -273,3 +273,33 @@ seconde d'écran figé.
 squelette lui-même tant que la navigation est en vol (82 ms mesurées jusqu'à
 l'apparition). La barre de filtres reste à l'écran : c'est elle qu'on vient de
 manipuler, la faire disparaître serait désorientant.
+
+
+## L'actualisation est bornée, et le dit
+
+Une actualisation tourne dans une fonction serverless, dont la durée est
+plafonnée. À 372 comptes interrogés l'un après l'autre, elle était **tuée avant
+sa fin** : trois passages consécutifs se sont terminés ainsi après l'import,
+sans qu'aucune erreur n'apparaisse nulle part. Le travail déjà fait restait
+acquis — chaque curseur avance à son compte, c'est l'invariant du module — mais
+la ligne du journal restait ouverte, et l'écran de diagnostics affichait ces
+passages comme des échecs.
+
+Trois changements :
+
+1. **Un budget explicite** : un plafond de comptes et une échéance d'horloge,
+   le premier atteint arrêtant le passage. L'horloge a le dernier mot, parce
+   que c'est elle que la plateforme regarde.
+2. **Un ordre** : du curseur le plus ancien au plus récent. Sans cela, un
+   passage borné rejouerait toujours les mêmes premiers comptes et les
+   derniers n'auraient jamais leur tour.
+3. **Un reste annoncé**, dans le toast d'actualisation et dans les
+   diagnostics. Un passage partiel est la normale à cette échelle ; le taire
+   ferait croire le rattrapage terminé.
+
+Les comptes sont désormais interrogés à quatre de front : ce sont des appels
+réseau, pas du calcul, et les enchaîner laissait la fonction inactive
+l'essentiel du temps.
+
+L'écran de diagnostics distingue enfin **trois** états et non deux. `ok = null`
+ne veut pas dire échec : il veut dire que le passage ne s'est jamais terminé.

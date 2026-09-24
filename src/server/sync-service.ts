@@ -151,6 +151,22 @@ export interface SyncOutcome extends SyncReport {
   durationMs: number;
 }
 
+/**
+ * Budget d'un passage d'actualisation.
+ *
+ * Une fonction serverless a une durée plafonnée. À plusieurs centaines de
+ * comptes interrogés à la suite, l'actualisation était tuée avant sa fin : le
+ * travail déjà fait restait acquis — chaque curseur avance à son compte — mais
+ * le journal gardait la ligne ouverte, et rien ne disait où l'on en était.
+ * Trois passages consécutifs se sont terminés ainsi après l'import des 372
+ * comptes, sans qu'aucune erreur ne soit visible nulle part.
+ *
+ * On s'arrête donc volontairement, et on dit combien il reste.
+ */
+const SYNC_WALL_CLOCK_MS = readIntEnv("SYNC_BUDGET_MS", 45_000);
+const SYNC_MAX_ACCOUNTS = readIntEnv("SYNC_MAX_ACCOUNTS_PER_RUN", 60);
+const SYNC_CONCURRENCY = readIntEnv("SYNC_CONCURRENCY", 4);
+
 export async function synchronize(
   scope: "all" | "posts" | "comments" = "all",
 ): Promise<SyncOutcome> {
@@ -166,6 +182,9 @@ export async function synchronize(
       maxPostsPerAccount: readIntEnv("MAX_POSTS_PER_ACCOUNT", 20),
       maxCommentsPerPost: readIntEnv("MAX_COMMENTS_PER_POST", 50),
       scope,
+      maxAccountsPerRun: SYNC_MAX_ACCOUNTS,
+      concurrency: SYNC_CONCURRENCY,
+      deadline: new Date(startedAt + SYNC_WALL_CLOCK_MS),
     });
 
     await finishSyncRun(runId, {
@@ -180,6 +199,7 @@ export async function synchronize(
       error: report.errors.length
         ? report.errors.map((e) => `${e.scope} : ${e.reason}`).join(" | ")
         : null,
+      remaining: report.accountsRemaining,
     });
 
     return { ...report, runId, durationMs: Date.now() - startedAt };

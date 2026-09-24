@@ -226,6 +226,28 @@ Tu n'as **rien à activer** sur Apify — le token suffit, les actors se lancent
 à la demande. Tu peux les remplacer sans toucher au code le jour où l'un
 d'eux disparaît (le marché est instable : Proxycurl a fermé en 2025).
 
+### `SYNC_BUDGET_MS`, `SYNC_MAX_ACCOUNTS_PER_RUN`, `SYNC_CONCURRENCY` — optionnelles
+
+```
+SYNC_BUDGET_MS=45000
+SYNC_MAX_ACCOUNTS_PER_RUN=60
+SYNC_CONCURRENCY=4
+```
+
+Budget d'un passage d'actualisation. Une fonction serverless a une durée
+plafonnée : à plusieurs centaines de comptes interrogés à la suite, elle est
+**tuée avant sa fin**. Le travail déjà fait reste acquis — chaque curseur
+avance à son compte — mais le journal garde la ligne ouverte et rien ne dit où
+l'on en est.
+
+L'actualisation s'arrête donc volontairement sur le premier des deux budgets
+atteint, traite les comptes du curseur le plus ancien au plus récent, et
+annonce combien il en reste. Relancer reprend là où c'était arrêté.
+
+`SYNC_CONCURRENCY` mène plusieurs comptes de front : ce sont des appels
+réseau, pas du calcul, et les enchaîner un par un laissait la fonction inactive
+l'essentiel du temps.
+
 ### `APIFY_PROFILE_ACTOR` — optionnelle
 
 ```

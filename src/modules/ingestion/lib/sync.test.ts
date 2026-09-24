@@ -287,3 +287,122 @@ describe("runSync — portée", () => {
     expect(rec.successes).toContain(RECEIVED_COMMENTS_CURSOR_KEY);
   });
 });
+
+describe("budget d'un passage", () => {
+  function ports(accountCount: number) {
+    const accounts = Array.from({ length: accountCount }, (_, index) => ({
+      id: `a${index}`,
+      profileUrl: `https://www.linkedin.com/in/a${index}`,
+      isSelf: false,
+      hasProfileMetadata: true,
+    }));
+    const synced: string[] = [];
+    const cursors = new Map<string, CursorState>();
+    return {
+      accounts,
+      synced,
+      cursors,
+      ports: {
+        listAccounts: async () => accounts,
+        readCursor: async (key: string) =>
+          cursors.get(key) ?? { lastSyncedAt: null },
+        recordCursorSuccess: async (key: string, at: Date) => {
+          cursors.set(key, { lastSyncedAt: at });
+        },
+        recordCursorFailure: async () => {},
+        savePosts: async (account: { id: string }) => {
+          synced.push(account.id);
+          return 0;
+        },
+        setAccountState: async () => {},
+        enrichAccount: async () => {},
+        listOwnPosts: async () => [],
+        saveComments: async () => 0,
+      } satisfies SyncPorts,
+    };
+  }
+
+  const provider = {
+    name: "stub",
+    fetchPostsForProfile: async () => ({ state: "ok" as const, posts: [] }),
+    fetchCommentsForPosts: async () => ({ state: "ok" as const, comments: [] }),
+  };
+
+  it("s'arrête au plafond de comptes et dit combien il reste", async () => {
+    // Plusieurs centaines de comptes ne tiennent pas dans une invocation
+    // serverless : sans plafond, la fonction est tuée avant la fin et le
+    // journal reste ouvert pour toujours.
+    const { ports: p, synced } = ports(10);
+    const report = await runSync(provider, p, {
+      ...OPTIONS,
+      now: new Date("2026-03-17T10:00:00Z"),
+      scope: "posts",
+      maxAccountsPerRun: 4,
+    });
+
+    expect(synced).toHaveLength(4);
+    expect(report.accountsRemaining).toBe(6);
+    expect(report.partial).toBe(true);
+  });
+
+  it("reprend là où le passage précédent s'est arrêté", async () => {
+    const { ports: p, synced } = ports(6);
+    const options = {
+      ...OPTIONS,
+      now: new Date("2026-03-17T10:00:00Z"),
+      scope: "posts" as const,
+      maxAccountsPerRun: 3,
+    };
+
+    await runSync(provider, p, options);
+    const first = [...synced];
+    synced.length = 0;
+
+    await runSync(provider, p, { ...options, now: new Date("2026-03-17T11:00:00Z") });
+
+    // Aucun compte du premier passage n'est rejoué : les curseurs les plus
+    // anciens passent d'abord, donc chaque passage avance vraiment.
+    expect(synced).toHaveLength(3);
+    expect(synced.some((id) => first.includes(id))).toBe(false);
+  });
+
+  it("n'entame pas un compte après l'échéance", async () => {
+    const { ports: p, synced } = ports(10);
+    const report = await runSync(provider, p, {
+      ...OPTIONS,
+      now: new Date("2026-03-17T10:00:00Z"),
+      scope: "posts",
+      // Échéance déjà passée : aucun compte ne doit être entamé, et le reste
+      // doit être annoncé en entier plutôt que perdu.
+      deadline: new Date(Date.now() - 1000),
+    });
+
+    expect(synced).toHaveLength(0);
+    expect(report.accountsRemaining).toBe(10);
+    expect(report.partial).toBe(true);
+  });
+
+  it("traite tout quand aucun budget n'est fixé", async () => {
+    const { ports: p, synced } = ports(7);
+    const report = await runSync(provider, p, {
+      ...OPTIONS,
+      now: new Date("2026-03-17T10:00:00Z"),
+      scope: "posts",
+    });
+    expect(synced).toHaveLength(7);
+    expect(report.accountsRemaining).toBe(0);
+    expect(report.partial).toBe(false);
+  });
+
+  it("traite chaque compte une seule fois en parallèle", async () => {
+    const { ports: p, synced } = ports(9);
+    await runSync(provider, p, {
+      ...OPTIONS,
+      now: new Date("2026-03-17T10:00:00Z"),
+      scope: "posts",
+      concurrency: 4,
+    });
+    expect(synced).toHaveLength(9);
+    expect(new Set(synced).size).toBe(9);
+  });
+});

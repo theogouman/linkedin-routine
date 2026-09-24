@@ -76,6 +76,8 @@ export function SettingsForm({
     ok: boolean | null;
     postsInserted: number;
     commentsInserted: number;
+    remaining: number;
+    accountsSynced: number;
     error: string | null;
   }>;
   failedCursors: Array<{ key: string; failures: number; error: string | null }>;
@@ -486,20 +488,37 @@ export function SettingsForm({
                   Aucune actualisation.
                 </li>
               ) : null}
-              {syncRuns.map((run) => (
-                <li key={run.id} className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>
-                  <span className={`nc-badge ${run.ok ? "nc-badge--ok" : "nc-badge--alert"}`}>
-                    {run.scope}
-                  </span>{" "}
-                  {relativeTime(run.startedAt)} · {run.postsInserted} pub. ·{" "}
-                  {run.commentsInserted} comm.
-                  {run.error ? (
-                    <span className="block" style={{ color: "var(--color-brand)" }}>
-                      {run.error.slice(0, 140)}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
+              {syncRuns.map((run) => {
+                // Trois états, pas deux. `ok = null` ne veut pas dire échec :
+                // il veut dire que le passage ne s'est jamais terminé — la
+                // fonction a été arrêtée. Les afficher en rouge comme des
+                // échecs cachait la vraie nature du problème.
+                const state =
+                  run.finishedAt === null
+                    ? { label: "interrompue", className: "nc-badge--neutral" }
+                    : run.ok
+                      ? { label: run.scope, className: "nc-badge--ok" }
+                      : { label: "échec", className: "nc-badge--alert" };
+                return (
+                  <li key={run.id} className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>
+                    <span className={`nc-badge ${state.className}`}>{state.label}</span>{" "}
+                    {relativeTime(run.startedAt)} · {run.accountsSynced} compte
+                    {run.accountsSynced > 1 ? "s" : ""} · {run.postsInserted} pub. ·{" "}
+                    {run.commentsInserted} comm.
+                    {run.remaining > 0 ? (
+                      <span className="block" style={{ color: "var(--color-text-muted)" }}>
+                        {run.remaining} compte{run.remaining > 1 ? "s" : ""} restant
+                        {run.remaining > 1 ? "s" : ""} — relance pour continuer.
+                      </span>
+                    ) : null}
+                    {run.error ? (
+                      <span className="block" style={{ color: "var(--color-brand)" }}>
+                        {run.error.slice(0, 140)}
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

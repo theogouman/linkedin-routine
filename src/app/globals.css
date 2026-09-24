@@ -1997,6 +1997,9 @@ body.nc-kb-open .nc-nav-pill-bar {
 }
 .nc-undo-action:hover { background: rgba(127, 127, 127, 0.4); }
 
+/* Le « Voir plus » réagit au survol sur toute sa bande. */
+.nc-card button[aria-expanded]:hover { color: var(--color-text-primary); }
+
 /* Image agrandissable : le curseur et un léger retrait au clic disent qu'il
    se passe quelque chose, sans ajouter de chrome par-dessus la photo. */
 .nc-zoomable {

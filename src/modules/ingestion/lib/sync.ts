@@ -63,6 +63,33 @@ export interface SyncOptions {
   maxCommentsPerPost: number;
   /** `posts` seul, `comments` seul, ou les deux. */
   scope?: "all" | "posts" | "comments";
+  /**
+   * Nombre maximum de comptes traités par passage.
+   *
+   * Une actualisation tourne dans une fonction serverless, dont la durée est
+   * plafonnée. À plusieurs centaines de comptes interrogés l'un après
+   * l'autre, elle est tuée AVANT sa fin : le travail déjà fait est conservé
+   * (chaque curseur avance à son compte), mais le journal reste ouvert et
+   * l'utilisateur n'apprend jamais où il en est. On borne donc explicitement,
+   * et on dit combien il reste.
+   */
+  maxAccountsPerRun?: number;
+  /**
+   * Instant au-delà duquel on arrête d'entamer un nouveau compte.
+   *
+   * Complémentaire du plafond de comptes : un compte lent suffit à faire
+   * dépasser un budget exprimé en nombre d'appels. C'est l'horloge qui a le
+   * dernier mot, parce que c'est elle que la plateforme regarde.
+   */
+  deadline?: Date;
+  /**
+   * Comptes interrogés en parallèle.
+   *
+   * Les appels au fournisseur sont de l'attente réseau, pas du calcul : les
+   * mener un par un laissait la fonction inactive l'essentiel du temps. Quatre
+   * de front divisent le temps de passage d'autant, sans peser sur la base.
+   */
+  concurrency?: number;
 }
 
 export interface SyncReport {
@@ -73,6 +100,10 @@ export interface SyncReport {
   commentsInserted: number;
   errors: Array<{ scope: string; reason: string }>;
   truncated: string[];
+  /** Comptes non traités par ce passage, à reprendre au suivant. */
+  accountsRemaining: number;
+  /** true quand le passage s'est arrêté sur son budget et non sur la fin. */
+  partial: boolean;
 }
 
 export function postsCursorKey(accountId: string): string {
@@ -95,6 +126,8 @@ export async function runSync(
     commentsInserted: 0,
     errors: [],
     truncated: [],
+    accountsRemaining: 0,
+    partial: false,
   };
 
   if (scope !== "comments") {
@@ -112,11 +145,32 @@ async function syncPosts(
   options: SyncOptions,
   report: SyncReport,
 ): Promise<void> {
-  const accounts = await ports.listAccounts();
+  const all = await ports.listAccounts();
 
-  for (const account of accounts) {
+  // Les comptes jamais synchronisés passent en premier, puis les plus anciens.
+  // Sans cet ordre, un passage borné rejouerait toujours les mêmes premiers
+  // comptes et les derniers de la liste n'auraient jamais leur tour.
+  const cursors = new Map<string, CursorState>();
+  for (const account of all) {
+    cursors.set(account.id, await ports.readCursor(postsCursorKey(account.id)));
+  }
+  const ordered = [...all].sort((a, b) => {
+    const left = cursors.get(a.id)?.lastSyncedAt?.getTime() ?? 0;
+    const right = cursors.get(b.id)?.lastSyncedAt?.getTime() ?? 0;
+    return left - right;
+  });
+
+  const budget = options.maxAccountsPerRun ?? Number.POSITIVE_INFINITY;
+  const selected = ordered.slice(0, Math.max(0, budget));
+  report.accountsRemaining = ordered.length - selected.length;
+  if (report.accountsRemaining > 0) report.partial = true;
+
+  let index = 0;
+  let stopped = false;
+
+  const runOne = async (account: SyncAccount): Promise<void> => {
     const key = postsCursorKey(account.id);
-    const cursor = await ports.readCursor(key);
+    const cursor = cursors.get(account.id) ?? (await ports.readCursor(key));
     const window = computeFetchWindow(cursor, {
       now: options.now,
       initialBackfillDays: options.initialBackfillDays,
@@ -138,14 +192,14 @@ async function syncPosts(
       report.accountsFailed += 1;
       report.errors.push({ scope: account.profileUrl, reason: outcome.reason });
       await ports.recordCursorFailure(key, outcome.reason);
-      continue;
+      return;
     }
 
     if (outcome.state === "restricted") {
       report.accountsRestricted += 1;
       await ports.setAccountState(account.id, "restricted", outcome.reason);
       await ports.recordCursorFailure(key, outcome.reason);
-      continue;
+      return;
     }
 
     const inserted = await ports.savePosts(account, outcome.posts);
@@ -182,6 +236,31 @@ async function syncPosts(
     }
 
     await ports.recordCursorSuccess(key, options.now);
+  };
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      if (stopped) return;
+      // L'horloge est consultée AVANT d'entamer un compte, jamais au milieu :
+      // un compte à moitié traité laisserait son curseur dans un état qui ne
+      // correspond à rien.
+      if (options.deadline && Date.now() >= options.deadline.getTime()) {
+        stopped = true;
+        return;
+      }
+      const account = selected[index];
+      if (!account) return;
+      index += 1;
+      await runOne(account);
+    }
+  };
+
+  const lanes = Math.max(1, Math.min(options.concurrency ?? 1, selected.length));
+  await Promise.all(Array.from({ length: lanes }, () => worker()));
+
+  if (stopped) {
+    report.partial = true;
+    report.accountsRemaining += selected.length - index;
   }
 }
 

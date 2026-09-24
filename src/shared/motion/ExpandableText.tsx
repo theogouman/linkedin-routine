@@ -76,11 +76,15 @@ export function ExpandableText({
         <span className="nc-fade-out" aria-hidden data-shown={collapsed} />
       </div>
 
+      {/* Pleine largeur et haut de 40 px : le libellé faisait cinquante pixels
+          de large, et le manquer au pouce coûtait un aller-retour. La zone
+          déborde d'une marge négative pour rattraper le retrait de la carte
+          sans décaler le texte. */}
       {overflows ? (
         <button
           type="button"
           onClick={toggle}
-          className="mt-1 text-[13px] font-medium"
+          className="-mx-4 flex h-10 w-[calc(100%+2rem)] items-center px-4 text-[13px] font-medium"
           style={{ color: "var(--color-text-secondary)" }}
           aria-expanded={open}
         >

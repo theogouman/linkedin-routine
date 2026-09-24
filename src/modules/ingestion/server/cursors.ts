@@ -83,6 +83,8 @@ export async function finishSyncRun(
     postsInserted: number;
     commentsInserted: number;
     error: string | null;
+    /** Comptes laissés pour le passage suivant. */
+    remaining?: number;
   },
 ): Promise<void> {
   const { error } = await db()
@@ -95,6 +97,7 @@ export async function finishSyncRun(
       posts_inserted: summary.postsInserted,
       comments_inserted: summary.commentsInserted,
       error: summary.error?.slice(0, 2000) ?? null,
+      accounts_remaining: summary.remaining ?? 0,
     })
     .eq("id", id);
   if (error) throw new Error(`Clôture du journal d'actualisation : ${error.message}`);
