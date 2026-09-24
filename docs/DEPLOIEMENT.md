@@ -15,10 +15,17 @@ bloque avec un message qui nomme la variable.
    dans l'éditeur SQL.
 3. Relève `SUPABASE_URL` et la **service role key**.
 
-Il n'y a ni RLS ni clé publique, volontairement : l'app est mono-utilisateur,
-tout l'accès données se fait côté serveur derrière le cookie de session, et le
-navigateur ne reçoit jamais de clé Supabase. Ajouter de la RLS ici donnerait
-une impression de défense sans frontière réelle supplémentaire.
+L'app est mono-utilisateur : aucun `user_id`, tout l'accès données se fait
+côté serveur derrière le cookie de session, et le navigateur ne reçoit jamais
+de clé Supabase.
+
+La migration 003 active malgré tout la RLS sur toutes les tables, **sans aucune
+politique**. C'est ce qui ferme l'API PostgREST à `anon` et `authenticated`
+— que l'app n'utilise pas — pendant que `service_role` la contourne
+nativement. L'app ne change pas d'une ligne. Sans cela, la seule chose qui
+protégerait les tables serait que la clé anon ne soit publiée nulle part, et
+ce n'est pas une frontière. L'analyseur Supabase signalera ensuite
+`rls_enabled_no_policy` en INFO : c'est le comportement voulu.
 
 ## 2. Récupération (Apify)
 

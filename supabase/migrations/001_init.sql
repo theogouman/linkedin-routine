@@ -2,10 +2,14 @@
 -- 001 — Schéma initial : listes, comptes suivis, publications, commentaires
 --       reçus, file d'écriture, curseurs de récupération, réglages, push.
 --
--- Mono-utilisateur (FR-012) : aucune colonne user_id, aucune RLS. TOUT l'accès
--- se fait côté serveur avec la service role key ; le client n'a jamais de clé
+-- Mono-utilisateur (FR-012) : aucune colonne user_id. TOUT l'accès se fait
+-- côté serveur avec la service role key ; le client n'a jamais de clé
 -- Supabase. L'authentification de l'app est portée par le cookie de session
 -- (FR-015), pas par Supabase Auth.
+--
+-- La RLS est activée par la migration 003, avec zéro politique : cela ferme
+-- l'API PostgREST à anon et authenticated, sans rien changer pour l'app
+-- (service_role contourne la RLS). Voir 003 pour le raisonnement.
 -- ════════════════════════════════════════════════════════════════════════════
 
 create extension if not exists "pgcrypto";
