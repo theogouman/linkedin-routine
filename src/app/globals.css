@@ -60,7 +60,24 @@ html {
   --ring: oklch(0.708 0 0);
 }
 
-.dark {
+/* `:root.dark` et non `.dark` : la spécificité, pas l'ordre.
+ *
+ * Les tokens du mode clair sont déclarés en DEUX endroits — les `--color-*`
+ * dans le `@theme inline` plus bas, que Tailwind hisse en tête de la feuille,
+ * et les `--nc-*` dans le second `:root`, émis tel quel APRÈS ce bloc. Avec un
+ * simple `.dark`, les deux sélecteurs pesaient pareil (0,1,0) et le dernier
+ * écrit gagnait : les `--color-*` basculaient bien en sombre, les `--nc-*`
+ * jamais. Treize tokens restaient donc bloqués sur leur valeur claire —
+ * `--nc-bottom-nav-bg` en tête, ce qui laissait la barre de navigation blanche
+ * en thème sombre et y rendait l'onglet actif illisible, texte compris.
+ *
+ * `:root.dark` pèse (0,2,0) et l'emporte sur n'importe quel `:root`, où qu'il
+ * soit dans le fichier. Le thème ne dépend plus de l'ordre des blocs, donc un
+ * `:root` ajouté plus bas demain ne pourra pas le re-casser en silence.
+ * La classe n'est posée que sur `<html>` (cf. THEME_INIT dans layout.tsx) :
+ * restreindre le sélecteur à la racine ne retire aucun usage.
+ */
+:root.dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
