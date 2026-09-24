@@ -16,7 +16,11 @@ import {
  */
 
 const PUBLIC_PATHS = ["/login", "/manifest.webmanifest", "/sw.js", "/offline"];
-const PUBLIC_PREFIXES = ["/_next/", "/icons/", "/api/cron/", "/api/auth/"];
+// `/api/auth/` a été retiré : aucune route n'y vit (la connexion est une
+// Server Action), et un préfixe ouvert « au cas où » finit par accueillir une
+// route qu'on croyait protégée. La production est joignable publiquement — la
+// seule barrière est cette liste, elle ne contient donc que ce qui existe.
+const PUBLIC_PREFIXES = ["/_next/", "/icons/", "/api/cron/"];
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
