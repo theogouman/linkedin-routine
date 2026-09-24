@@ -122,8 +122,26 @@ D'où la répartition en trois étages :
 #### Mettre en place pg_cron
 
 Console Supabase → **SQL Editor** → colle
-[`002_drain_schedule.sql`](../supabase/migrations/002_drain_schedule.sql) après
-y avoir remplacé `<APP_URL>` et `<CRON_SECRET>` → **Run**.
+[`002_drain_schedule.sql`](../supabase/migrations/002_drain_schedule.sql) tel
+quel → **Run**. La migration s'applique sans rien éditer : elle laisse la
+configuration vide et les jobs tournent à vide tant qu'elle l'est.
+
+Puis, une fois l'app déployée, une seule instruction les active :
+
+```sql
+update drain_config
+   set app_url     = 'https://ton-app.vercel.app',
+       cron_secret = 'la valeur de CRON_SECRET sur Vercel',
+       updated_at  = now()
+ where id = 1;
+```
+
+> ⚠️ **Deployment Protection.** Si la protection SSO de Vercel est active sur
+> le domaine visé, ces appels reçoivent une redirection d'authentification au
+> lieu de la route, et rien ne part jamais. Trois issues : la désactiver,
+> pointer `app_url` sur un domaine personnalisé (la protection
+> « all except custom domains » les épargne), ou ajouter un
+> **Protection Bypass for Automation**.
 
 Vérification :
 
