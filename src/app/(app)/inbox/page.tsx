@@ -44,12 +44,10 @@ export default async function InboxPage({
         }
       />
 
-      {queueState.status === "suspended" ? (
-        <SuspendedBanner
-          reason={queueState.suspended_reason}
-          suspendedAt={queueState.suspended_at}
-        />
-      ) : null}
+      <SuspendedBanner
+        reason={queueState.status === "suspended" ? queueState.suspended_reason : null}
+        suspendedAt={queueState.status === "suspended" ? queueState.suspended_at : null}
+      />
 
       {self === null ? (
         <EmptyState

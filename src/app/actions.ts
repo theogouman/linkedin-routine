@@ -9,7 +9,7 @@ import {
   removeAccountFromList,
   renameList,
 } from "@/modules/lists/server/repository";
-import { REJECTION_LABELS } from "@/modules/lists/lib/profile-url";
+import { REJECTION_LABELS } from "@/shared/lib/linkedin-url";
 import {
   cancelAction,
   getQueueState,
@@ -30,7 +30,7 @@ import {
   replyToComment,
   restorePost,
 } from "@/server/engagement-service";
-import { synchronize } from "@/server/sync-service";
+import { enrichProfiles, synchronize } from "@/server/sync-service";
 
 /**
  * Server Actions appelées par l'UI.
@@ -84,6 +84,33 @@ export async function refreshNow(
         report.errors.length > 0
           ? `${report.accountsFailed} compte(s) en échec — curseurs intacts, nouvelle tentative au prochain passage.`
           : undefined,
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Récupération des photos et des noms de profil (passe séparée).
+ *
+ * Distincte de l'actualisation parce que son coût est d'une autre nature :
+ * chaque profil est facturé à l'unité, alors que l'actualisation ne paie que
+ * ce qui a été publié. C'est un geste que l'utilisateur déclenche en sachant
+ * ce qu'il déclenche, et le résultat lui dit combien il reste à faire.
+ */
+export async function fetchProfilePhotosAction(): Promise<
+  ActionResult & { attempted?: number; enriched?: number; more?: boolean }
+> {
+  try {
+    const outcome = await enrichProfiles();
+    revalidatePath("/listes");
+    revalidatePath("/fil");
+    return {
+      ok: true,
+      attempted: outcome.attempted,
+      enriched: outcome.enriched,
+      more: outcome.more,
+      message: outcome.message,
     };
   } catch (error) {
     return fail(error);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeProfileUrl, parseBulkProfileUrls } from "./profile-url";
+import { normalizeProfileUrl, parseBulkProfileUrls } from "./linkedin-url";
 
 function expectUrl(input: string, expected: string) {
   const result = normalizeProfileUrl(input);

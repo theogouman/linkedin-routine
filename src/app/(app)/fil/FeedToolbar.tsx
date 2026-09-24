@@ -5,6 +5,8 @@ import { useLayoutEffect, useRef, useTransition } from "react";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { refreshNow } from "@/app/actions";
+import { MatrixLoader } from "@/shared/motion/MatrixLoader";
+import { TooltipGroup } from "@/shared/motion/Tooltip";
 
 /**
  * Filtre par liste + actualisation manuelle (FR-003, FR-004).
@@ -94,7 +96,7 @@ export function FeedToolbar({
   };
 
   return (
-    <div className="mb-1 flex items-center gap-2">
+    <TooltipGroup className="nc-tt-row mb-1 items-center gap-2">
       <div ref={barRef} className="nc-scroll-x t-tabs min-w-0 flex-1" role="tablist">
         <span ref={pillRef} className="t-tabs-pill" aria-hidden />
         {tabs.map((tab) => (
@@ -115,21 +117,28 @@ export function FeedToolbar({
         type="button"
         onClick={toggleScope}
         className="nc-btn nc-btn--ghost nc-btn--sm shrink-0"
-        title={showAll ? "N'afficher que les non traitées" : "Afficher aussi les traitées"}
+        data-tooltip={showAll ? "N'afficher que les non traitées" : "Afficher aussi les traitées"}
       >
         {showAll ? "À traiter" : "Tout"}
       </button>
 
+      {/* transitions.dev · 31 — le loader matriciel remplace le spinner
+          pendant l'actualisation : il tient dans le bouton sans en changer la
+          taille, donc la barre ne bouge pas. */}
       <button
         type="button"
         onClick={refresh}
         disabled={pending}
         className="nc-icon-btn shrink-0"
-        title={`Dernière actualisation : ${lastSyncLabel}`}
+        data-tooltip={`Dernière actualisation : ${lastSyncLabel}`}
         aria-label="Actualiser"
       >
-        <RefreshCw size={16} className={pending ? "animate-spin" : undefined} aria-hidden />
+        {pending ? (
+          <MatrixLoader variant="orbit" />
+        ) : (
+          <RefreshCw size={16} aria-hidden />
+        )}
       </button>
-    </div>
+    </TooltipGroup>
   );
 }

@@ -51,12 +51,11 @@ export default async function FeedPage({
         }
       />
 
-      {queueState.status === "suspended" ? (
-        <SuspendedBanner
-          reason={queueState.suspended_reason}
-          suspendedAt={queueState.suspended_at}
-        />
-      ) : null}
+      <SuspendedBanner
+        reason={queueState.status === "suspended" ? queueState.suspended_reason : null}
+        suspendedAt={queueState.status === "suspended" ? queueState.suspended_at : null}
+        restrictedAccounts={lists.reduce((total, list) => total + list.restrictedCount, 0)}
+      />
 
       <FeedToolbar
         lists={lists.map((list) => ({ id: list.id, name: list.name, count: list.accountCount }))}

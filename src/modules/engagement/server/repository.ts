@@ -88,6 +88,22 @@ export async function getPendingActions(): Promise<WriteActionRow[]> {
   ) as WriteActionRow[];
 }
 
+/**
+ * Compte seul, sans ramener les lignes.
+ *
+ * La pastille de navigation n'a besoin que du nombre ; charger la file entière
+ * pour en prendre la longueur faisait transiter tout le corps des commentaires
+ * en attente à chaque affichage d'écran.
+ */
+export async function countPendingActions(): Promise<number> {
+  const { count, error } = await db()
+    .from("write_actions")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["pending", "sending"]);
+  if (error) throw new Error(`Comptage de la file : ${error.message}`);
+  return count ?? 0;
+}
+
 export async function getDueActions(now: Date, limit = 5): Promise<WriteActionRow[]> {
   return unwrap(
     await db()

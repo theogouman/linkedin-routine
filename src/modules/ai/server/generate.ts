@@ -11,6 +11,7 @@ import {
   type GenerationContext,
 } from "../lib/prompt";
 import { isPlaceholder, PROCESS_FILES, type ProcessKind } from "../lib/process-files";
+import { DEFAULT_EFFORT, DEFAULT_MODEL, supportsEffort, type Effort } from "../lib/model";
 
 /**
  * Génération assistée (FR-006, FR-019).
@@ -20,14 +21,10 @@ import { isPlaceholder, PROCESS_FILES, type ProcessKind } from "../lib/process-f
  * exposerait le compte Claude de l'utilisateur. Le code ne lit donc QUE
  * `ANTHROPIC_API_KEY`.
  *
- * `effort: "low"` par défaut : rédiger un commentaire de cinquante mots selon
- * un process fourni n'est pas une tâche de raisonnement. C'est le réglage qui
- * tient la cible de « quelques euros par mois » sans rien perdre en qualité ;
- * il reste surchargeable.
+ * Le choix du modèle et la transmission de `output_config` vivent dans
+ * `../lib/model` : ce sont des décisions testables sans client HTTP.
  */
 
-const DEFAULT_MODEL = "claude-opus-5";
-const DEFAULT_EFFORT = "low";
 const MAX_TOKENS = 4000;
 
 let client: Anthropic | null = null;
@@ -74,14 +71,13 @@ export async function generateComment(
 ): Promise<GenerationResult> {
   const processMarkdown = await readProcess(context.kind);
   const model = readEnv("ANTHROPIC_MODEL") ?? DEFAULT_MODEL;
-  const effort = (readEnv("ANTHROPIC_EFFORT") ?? DEFAULT_EFFORT) as
-    | "low" | "medium" | "high" | "xhigh" | "max";
+  const effort = (readEnv("ANTHROPIC_EFFORT") ?? DEFAULT_EFFORT) as Effort;
 
   try {
     const response = await anthropic().messages.create({
       model,
       max_tokens: MAX_TOKENS,
-      output_config: { effort },
+      ...(supportsEffort(model) ? { output_config: { effort } } : {}),
       system: buildSystemPrompt(processMarkdown),
       messages: [{ role: "user", content: buildUserPrompt(context) }],
     });

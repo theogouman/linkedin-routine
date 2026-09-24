@@ -226,11 +226,27 @@ Tu n'as **rien à activer** sur Apify — le token suffit, les actors se lancent
 à la demande. Tu peux les remplacer sans toucher au code le jour où l'un
 d'eux disparaît (le marché est instable : Proxycurl a fermé en 2025).
 
-### `APIFY_PROFILE_ACTOR` — optionnelle, vide par défaut
+### `APIFY_PROFILE_ACTOR` — optionnelle
 
-Enrichit nom et photo à l'ajout d'un compte. Sans elle, ces métadonnées sont
-déduites de la première publication récupérée — gratuitement. Laisse vide sauf
-besoin.
+```
+APIFY_PROFILE_ACTOR=harvestapi~linkedin-profile-scraper
+```
+
+Récupère le **nom et la photo de profil** d'un compte. Une valeur par défaut
+est fournie (celle ci-dessus) : il n'y a rien à renseigner.
+
+Elle était vide auparavant, et c'était un trou. Les métadonnées sont bien
+déduites gratuitement de la première publication récupérée — mais **seulement
+si le compte a publié** sur la fenêtre d'actualisation. Un créateur importé qui
+n'a rien posté depuis un mois restait sans nom et sans visage dans ses listes,
+indéfiniment, sans que rien ne le signale.
+
+Le bouton **« Photos (N) »** de l'écran Listes lance la récupération pour les
+comptes concernés, par lots de cent. Coût : environ 4 $ pour mille profils —
+soit ~1,50 $ une seule fois pour les 372 comptes importés. Les photos des
+comptes qui publient se rafraîchissent ensuite gratuitement à chaque
+actualisation, ce qui est nécessaire : les URLs du CDN LinkedIn sont signées et
+expirent.
 
 ---
 
@@ -295,21 +311,26 @@ provisioning.
 > d'Anthropic et exposerait ton compte Claude. Le code ne lit que
 > `ANTHROPIC_API_KEY`, il n'y a aucun chemin d'accès à l'autre.
 
-Coût : à `claude-opus-5` en effort `low`, une génération consomme quelques
-centaines de tokens. 25 générations par jour restent sous quelques euros par
-mois.
+Coût : à `claude-haiku-4-5-20251001`, une génération consomme quelques
+centaines de tokens. 25 générations par jour se comptent en centimes par mois.
 
 ### `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT` — optionnelles
 
 ```
-ANTHROPIC_MODEL=claude-opus-5
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 ANTHROPIC_EFFORT=low          # low | medium | high | xhigh | max
 ```
 
-`low` suffit : rédiger cinquante mots selon un process fourni n'est pas une
-tâche de raisonnement. Monte à `medium` si les propositions te semblent plates
-une fois tes process rédigés — c'est le réglage à bouger en premier, avant de
-changer de modèle.
+Haiku est le défaut : rédiger cinquante mots selon un process fourni n'est pas
+une tâche de raisonnement, c'est de la mise en forme contrainte. Si les
+propositions te semblent plates une fois tes process rédigés, passe à
+`claude-sonnet-5` avant de toucher à autre chose.
+
+`ANTHROPIC_EFFORT` n'est transmis **que** pour la famille Claude 5
+(`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5-1`). Le paramètre
+`output_config` n'existe pas sur Haiku 4.5 : le lui envoyer ferait rejeter
+chaque requête. Le code teste donc le nom du modèle avant de l'inclure, et la
+variable est simplement sans effet sur Haiku.
 
 ---
 

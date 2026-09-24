@@ -6,7 +6,10 @@
 src/
   app/                    Routes Next.js + Server Actions (orchestration)
   server/                 Composition : branche les modules entre eux
-  shared/                 Transverse — client DB, types de lignes, UI, format
+  shared/
+    components/           UI partagée (navigation, avatar, composer, alertes)
+    motion/               transitions.dev — un composant par transition
+    lib/                  Client DB, types de lignes, URLs LinkedIn, format
   modules/
     auth/                 Mot de passe unique, session, middleware
     lists/                Listes et comptes suivis
@@ -104,7 +107,7 @@ la seconde ne touche aucune ligne.
 
 ## Tests
 
-196 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
+238 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
 
 | Sujet | Ce qui est vérifié |
 |---|---|
@@ -113,8 +116,91 @@ la seconde ne touche aucune ligne.
 | `cursor` / `sync` | Un échec ne fait pas avancer le curseur ; un compte en panne n'empêche pas les autres |
 | `normalize` | Partages exclus, doublons écartés, date invalide refusée plutôt que ramenée à 1970 |
 | `timezone` | Aller-retour stable sur une année, passage à l'heure d'été compris |
-| `profile-url` | Onze formes d'URL LinkedIn convergent vers une seule |
+| `linkedin-url` | Onze formes d'URL LinkedIn convergent vers une seule ; un identifiant opaque garde sa casse |
+| `profiles` | L'appariement d'un lot d'enrichissement se fait par identifiant, jamais par position |
+| `model` | Haiku par défaut, et `output_config` n'est transmis qu'aux modèles qui le connaissent |
+| `nav-routes` | Aucun écran du groupe `(app)` n'est absent de la barre ; `/file` n'allume pas l'onglet `/fil` |
 
-Un test a déjà attrapé un bug réel avant qu'il n'existe en production : un
-503 dont le corps contenait « service unavailable » était classé « profil
-restreint », ce qui aurait marqué un compte sain comme définitivement mort.
+Deux tests ont déjà attrapé un bug réel avant qu'il n'existe en production :
+un 503 dont le corps contenait « service unavailable » était classé « profil
+restreint », ce qui aurait marqué un compte sain comme définitivement mort ; et
+un `startsWith` nu faisait allumer l'onglet « Fil » sur l'écran « File ».
+
+
+## Les écrans
+
+| Route | Ce qu'on y répond |
+|---|---|
+| `/fil` | Qu'est-ce que mes créateurs ont publié, et que je n'ai pas encore traité |
+| `/inbox` | Qui m'a répondu, et à qui je n'ai pas encore répondu |
+| `/file` | Qu'est-ce qui va partir, quand, et combien me reste-t-il aujourd'hui |
+| `/listes` | Qui je suis, et dans quel périmètre |
+| `/reglages` | Comment le compte se comporte en général |
+
+`/reglages` était un repli de `/file`. Deux questions très différentes — ce qui
+part aujourd'hui, et le régime du compte — partageaient un écran, et la seconde
+poussait la première sous la ligne de flottaison.
+
+La barre de navigation est **haute sur desktop, basse sur mobile**, rendue par
+un seul composant : dupliquer la liste d'onglets garantirait qu'un jour l'une
+des deux oublie un écran. L'ordre des onglets vit dans
+`shared/components/nav-routes.ts`, et c'est de lui que la transition de page
+tire son sens de glissement.
+
+## Navigation : ce qui la rend légère
+
+Trois choses, dans cet ordre d'importance :
+
+1. **Les compteurs ne bloquent plus le rendu.** Ils vivaient dans un `await`
+   du layout : trois allers-retours Postgres s'ajoutaient à l'affichage de
+   chaque écran, y compris quand l'écran lui-même était prêt. Chacun est
+   maintenant sa propre frontière `Suspense` — la coquille et la barre partent
+   au premier octet, les pastilles arrivent derrière.
+2. **Un `loading.tsx` par route.** L'App Router l'affiche instantanément
+   pendant que le segment se rend côté serveur. C'est ce qui change la nature
+   du clic : l'écran arrive avec sa structure et se remplit, au lieu de laisser
+   l'écran précédent figé.
+3. **`prefetch` sur les liens de la barre, et un `template.tsx`** qui rejoue la
+   transition d'entrée à chaque navigation. Un `layout.tsx` serait réutilisé et
+   ne rejouerait rien.
+
+Aucune des trois ne supprime le rendu serveur : les données restent fraîches à
+chaque affichage, c'est l'attente qui a changé de place.
+
+## Bibliothèque de mouvement
+
+`shared/motion/` porte les transitions de [transitions.dev](https://transitions.dev),
+une par fichier, reprises **verbatim** : pas de raccourci, pas de suppression
+du `will-change`, garde `prefers-reduced-motion` conservé partout. Ce qui a été
+adapté, et uniquement cela :
+
+- les **couleurs** viennent du design system Notion Club, jamais des valeurs
+  d'exemple de la bibliothèque (le cœur du bouton « liker » est à la marque, pas
+  au rouge de la démo) ;
+- les **valeurs réglables** documentées comme telles (la course d'un pouce
+  d'interrupteur, les dimensions ouvertes d'une morphose) sont passées en
+  variables plutôt que codées aux dimensions de la démo ;
+- deux raccords de spécificité vivent en bas de `globals.css`, commentés :
+  les utilitaires Tailwind sont dans une couche CSS et perdent donc contre les
+  snippets quel que soit l'ordre.
+
+Une seule transition du catalogue n'est pas installée : **reasoning stream**,
+qui fait défiler un transcript de raisonnement d'agent deux lignes à la fois.
+L'app n'en affiche aucun, et lui en fabriquer un pour justifier l'animation
+serait exactement ce que le mouvement ne doit pas faire.
+
+Les trente et une autres portent chacune un état réel. Quelques exemples de ce
+que cela veut dire concrètement :
+
+| Transition | Ce qu'elle rend visible |
+|---|---|
+| Card resize + accordion | L'ouverture d'une liste, d'un réglage, du composer |
+| Notification badge + number pop-in | « Il y a maintenant quelque chose à traiter », puis « il y en a un de plus » |
+| Like button | Le seul geste qui ne coûte qu'un clic mérite d'être satisfaisant |
+| Thinking states + streaming text | Ce que fait la génération, et le temps de lire avant de valider (FR-006) |
+| Shimmer | Un envoi en cours — le seul état de la file où quelque chose se passe à l'instant où on regarde |
+| Skeleton reveal | Le chargement de chaque portrait, au lieu de photos qui sautent une par une |
+| Banner stacking | Trois alertes qui s'empilent au lieu de repousser le fil sous la ligne de flottaison |
+| Error shake | Une erreur là où on la corrige, plutôt qu'un toast à l'autre bout de l'écran |
+| Modal + dropdown | `window.prompt` et `window.confirm`, qui affichent le nom d'hôte en PWA installée |
+| Card tilt | Au pointeur fin uniquement, et coupé pendant la rédaction |

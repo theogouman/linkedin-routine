@@ -5,6 +5,22 @@ import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import type { EnqueueActionResult, GenerateResult } from "@/app/actions";
 import { scheduledLabel } from "@/shared/lib/format";
+import { ErrorMessage, useShake } from "@/shared/motion/ShakeInput";
+import { StreamingText } from "@/shared/motion/StreamingText";
+import { ThinkingStates } from "@/shared/motion/ThinkingStates";
+
+/**
+ * transitions.dev · 28 — Thinking states.
+ *
+ * Trois états qui décrivent vraiment ce que fait la génération, au lieu d'un
+ * « Génération… » figé. La ligne chatoie pendant qu'elle tient : l'app dit
+ * qu'elle travaille encore, même quand l'appel dure dix secondes.
+ */
+const GENERATION_STATES = [
+  "Lecture du process…",
+  "Rédaction…",
+  "Relecture…",
+];
 
 /**
  * Zone de rédaction partagée par le fil et l'inbox (FR-005, FR-006, FR-009).
@@ -36,6 +52,11 @@ export function Composer({
 }) {
   const [value, setValue] = useState("");
   const [generated, setGenerated] = useState<string | null>(null);
+  // Aperçu en flux : le texte généré se pose mot à mot AVANT d'entrer dans le
+  // champ. C'est le temps de commencer à le lire, donc de décider s'il part
+  // (FR-006) au lieu de le publier par réflexe.
+  const [streaming, setStreaming] = useState<string | null>(null);
+  const shake = useShake();
   const [generating, startGenerating] = useTransition();
   const [submitting, startSubmitting] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -62,21 +83,23 @@ export function Composer({
         toast.error(result.message ?? "Génération impossible.");
         return;
       }
-      setValue(result.text);
       setGenerated(result.text);
+      // Le texte n'entre pas encore dans le champ : il se pose d'abord dans
+      // l'aperçu. Le remplir tout de suite afficherait la même proposition
+      // deux fois, et donnerait l'impression que l'aperçu est un doublon.
+      setStreaming(result.text);
       if (result.placeholderProcess) {
         toast.warning(
           "Le process de génération n'est pas encore rédigé : la proposition reste générique.",
         );
       }
-      requestAnimationFrame(() => textareaRef.current?.focus());
     });
   };
 
   const submit = () => {
     const body = value.trim();
     if (body === "") {
-      toast.error("Le texte est vide.");
+      shake.shake("Le texte est vide.");
       return;
     }
     const origin =
@@ -95,23 +118,47 @@ export function Composer({
       );
       setValue("");
       setGenerated(null);
+      setStreaming(null);
       onDone();
     });
   };
 
   return (
-    <div>
+    <div className={shake.wrapClassName}>
+      {streaming !== null ? (
+        <div
+          className="nc-input mb-2 whitespace-pre-wrap leading-[1.5]"
+          style={{ fontSize: 15 }}
+          aria-hidden
+        >
+          <StreamingText
+            text={streaming}
+            onDone={() => {
+              setValue(streaming);
+              setStreaming(null);
+              requestAnimationFrame(() => textareaRef.current?.focus());
+            }}
+          />
+        </div>
+      ) : null}
       <textarea
         ref={textareaRef}
         value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onFocus={() => document.body.classList.add("nc-kb-open")}
+        onChange={(event) => {
+          setValue(event.target.value);
+          setStreaming(null);
+        }}
+        onFocus={() => {
+          document.body.classList.add("nc-kb-open");
+          setStreaming(null);
+        }}
         onBlur={() => document.body.classList.remove("nc-kb-open")}
         placeholder={placeholder}
         rows={2}
-        className="nc-input resize-none leading-[1.5]"
+        className={`nc-input resize-none leading-[1.5] ${shake.inputClassName}`}
         disabled={submitting}
       />
+      <ErrorMessage>{shake.error}</ErrorMessage>
 
       <div className="mt-2.5 flex items-center gap-2">
         <button
@@ -121,13 +168,7 @@ export function Composer({
           className="nc-btn nc-btn--ghost nc-btn--sm"
         >
           <Sparkles size={15} aria-hidden />
-          {generating ? (
-            <span className="t-shimmer" data-text="Génération…">
-              Génération…
-            </span>
-          ) : (
-            generateLabel
-          )}
+          {generating ? <ThinkingStates states={GENERATION_STATES} /> : generateLabel}
         </button>
 
         <div className="flex-1" />

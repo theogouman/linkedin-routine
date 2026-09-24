@@ -1,11 +1,11 @@
+import { Suspense } from "react";
 import { after } from "next/server";
-import { BottomNav } from "@/shared/components/BottomNav";
+import { AppNav } from "@/shared/components/AppNav";
+import { NavBadge } from "@/shared/components/NavBadge";
 import { countUnprocessedPosts } from "@/modules/feed/server/repository";
 import { countUnprocessedComments } from "@/modules/inbox/server/repository";
-import { getPendingActions } from "@/modules/engagement/server/repository";
+import { countPendingActions } from "@/modules/engagement/server/repository";
 import { drainOpportunistically } from "@/server/queue-service";
-
-export const dynamic = "force-dynamic";
 
 /**
  * Coquille de l'app.
@@ -13,8 +13,19 @@ export const dynamic = "force-dynamic";
  * Les compteurs sont calculés ici et non dans chaque page : c'est la promesse
  * « inbox » du produit — savoir en permanence combien il reste, depuis
  * n'importe quel écran.
+ *
+ * Mais ils ne BLOQUENT plus le rendu. Chaque compteur est sa propre frontière
+ * `Suspense` : la coquille et la navigation partent au premier octet, les
+ * pastilles arrivent en streaming derrière. Avant, trois allers-retours
+ * Postgres s'ajoutaient au temps d'affichage de chaque écran, y compris quand
+ * l'écran lui-même était déjà prêt.
  */
-export default async function AppLayout({
+// Rien ici n'est prérendu : les compteurs lisent la base à chaque affichage.
+// Cela n'annule pas le streaming — `Suspense` découpe la réponse dynamique
+// elle aussi, la coquille part d'abord et les pastilles suivent.
+export const dynamic = "force-dynamic";
+
+export default function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   // Purge opportuniste, APRÈS l'envoi de la réponse : elle n'ajoute aucune
@@ -23,20 +34,45 @@ export default async function AppLayout({
   // n'autorise qu'un cron par jour — cf. supabase/migrations/002).
   after(drainOpportunistically);
 
-  const [posts, comments, pending] = await Promise.all([
-    countUnprocessedPosts(),
-    countUnprocessedComments(),
-    getPendingActions(),
-  ]);
-
   return (
     <div className="nc-page min-h-dvh">
-      {/* pb : hauteur de la barre flottante + safe-area, pour que le dernier
-          élément de chaque liste ne se cache jamais dessous. */}
-      <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-[calc(112px+env(safe-area-inset-bottom,0px))]">
+      <AppNav
+        badges={{
+          posts: (
+            <Suspense fallback={null}>
+              <PostsBadge />
+            </Suspense>
+          ),
+          comments: (
+            <Suspense fallback={null}>
+              <CommentsBadge />
+            </Suspense>
+          ),
+          queue: (
+            <Suspense fallback={null}>
+              <QueueBadge />
+            </Suspense>
+          ),
+        }}
+      />
+      {/* pb : hauteur de la barre flottante + safe-area sur mobile, pour que le
+          dernier élément de chaque liste ne se cache jamais dessous. Sur
+          desktop la barre est en haut, il n'y a plus rien à compenser. */}
+      <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-[calc(112px+env(safe-area-inset-bottom,0px))] md:pb-16">
         {children}
       </div>
-      <BottomNav counts={{ posts, comments, queue: pending.length }} />
     </div>
   );
+}
+
+async function PostsBadge() {
+  return <NavBadge count={await countUnprocessedPosts()} />;
+}
+
+async function CommentsBadge() {
+  return <NavBadge count={await countUnprocessedComments()} />;
+}
+
+async function QueueBadge() {
+  return <NavBadge count={await countPendingActions()} />;
 }

@@ -9,6 +9,7 @@ import {
 import { insertNewPosts, getOwnPostsSince } from "@/modules/feed/server/repository";
 import { insertNewComments, mapProviderCommentIds } from "@/modules/inbox/server/repository";
 import {
+  getAccountsMissingProfile,
   getSyncableAccounts,
   setAccountFetchState,
   updateAccountProfile,
@@ -192,4 +193,63 @@ export async function synchronize(
     });
     throw error;
   }
+}
+
+export interface EnrichmentOutcome {
+  /** Comptes examinés pendant la passe. */
+  attempted: number;
+  /** Comptes pour lesquels le fournisseur a rendu un profil. */
+  enriched: number;
+  /** true quand il reste des comptes à traiter après ce lot. */
+  more: boolean;
+  message?: string;
+}
+
+/**
+ * Récupération des photos et des noms de profil.
+ *
+ * Passe séparée de l'actualisation parce qu'elle répond à un autre besoin.
+ * L'actualisation cherche des publications ; l'enrichissement cherche une
+ * identité. Un créateur qui n'a rien publié depuis un mois n'apparaît dans
+ * aucune fenêtre d'actualisation, mais il est bien dans une liste, et il doit
+ * y avoir un visage.
+ *
+ * Plafonnée par lot, parce que chaque profil est facturé : amorcer plusieurs
+ * centaines de comptes est une dépense ponctuelle qu'il vaut mieux voir
+ * arriver en plusieurs fois qu'en une facture surprise.
+ */
+export async function enrichProfiles(limit = 100): Promise<EnrichmentOutcome> {
+  const provider = getIngestionProvider();
+  if (!provider.fetchProfiles) {
+    return {
+      attempted: 0,
+      enriched: 0,
+      more: false,
+      message: `Le fournisseur « ${provider.name} » ne sait pas récupérer de profils.`,
+    };
+  }
+
+  const accounts = await getAccountsMissingProfile(limit + 1);
+  const batch = accounts.slice(0, limit);
+  if (batch.length === 0) {
+    return { attempted: 0, enriched: 0, more: false };
+  }
+
+  const profiles = await provider.fetchProfiles(batch.map((account) => account.profile_url));
+  const byUrl = new Map(profiles.map((profile) => [profile.profileUrl, profile]));
+
+  let enriched = 0;
+  for (const account of batch) {
+    const profile = byUrl.get(account.profile_url);
+    if (!profile) continue;
+    if (profile.name === null && profile.avatarUrl === null) continue;
+    await updateAccountProfile(account.id, {
+      name: profile.name,
+      headline: profile.headline,
+      avatarUrl: profile.avatarUrl,
+    });
+    enriched += 1;
+  }
+
+  return { attempted: batch.length, enriched, more: accounts.length > limit };
 }

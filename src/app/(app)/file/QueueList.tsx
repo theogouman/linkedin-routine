@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Heart, MessageSquare, Reply, X } from "lucide-react";
 import { cancelQueuedAction } from "@/app/actions";
 import { scheduledLabel } from "@/shared/lib/format";
+import { SpinningCounter } from "@/shared/motion/SpinningCounter";
+import { TooltipGroup } from "@/shared/motion/Tooltip";
 
 /**
  * File d'envoi visible et annulable (FR-017).
@@ -30,6 +32,7 @@ export function QueueList({
     body: string | null;
     scheduledFor: string;
     origin: string;
+    status: "pending" | "sending" | "sent" | "cancelled" | "failed";
   }>;
   caps: { comments: number; likes: number; total: number; factor: number };
   used: { comments: number; likes: number; total: number };
@@ -48,7 +51,8 @@ export function QueueList({
   };
 
   return (
-    <section className="nc-card nc-content-enter mb-3 overflow-hidden">
+    <TooltipGroup className="nc-tt-block mb-3">
+    <section className="nc-card nc-content-enter overflow-hidden">
       <div className="grid grid-cols-3 border-b" style={{ borderColor: "var(--color-border-default)" }}>
         <Gauge label="Commentaires" used={used.comments} cap={caps.comments} />
         <Gauge label="Likes" used={used.likes} cap={caps.likes} />
@@ -63,14 +67,27 @@ export function QueueList({
         <ul className="divide-y" style={{ borderColor: "var(--color-border-default)" }}>
           {actions.map((action) => {
             const Icon = ICONS[action.kind];
+            const sending = action.status === "sending";
             return (
               <li key={action.id} className="flex items-start gap-3 px-4 py-3">
                 <Icon size={16} className="mt-1 shrink-0" style={{ color: "var(--color-text-muted)" }} aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium">
-                    {LABELS[action.kind]} · envoi {scheduledLabel(action.scheduledFor, new Date(), timezone)}
+                  <p className="flex flex-wrap items-center gap-x-2 text-[13px] font-medium">
+                    {/* transitions.dev · 15 — un envoi EN COURS chatoie. C'est
+                        le seul état de la file où quelque chose se passe
+                        vraiment à l'instant où on regarde. */}
+                    {sending ? (
+                      <span className="t-shimmer" data-text={`${LABELS[action.kind]} · envoi en cours…`}>
+                        {LABELS[action.kind]} · envoi en cours…
+                      </span>
+                    ) : (
+                      <span>
+                        {LABELS[action.kind]} · envoi{" "}
+                        {scheduledLabel(action.scheduledFor, new Date(), timezone)}
+                      </span>
+                    )}
                     {action.origin !== "manual" ? (
-                      <span className="nc-badge nc-badge--neutral ml-2">IA</span>
+                      <span className="nc-badge nc-badge--neutral">IA</span>
                     ) : null}
                   </p>
                   {action.body ? (
@@ -82,10 +99,10 @@ export function QueueList({
                 <button
                   type="button"
                   className="nc-icon-btn shrink-0"
-                  disabled={pending}
+                  disabled={pending || sending}
                   onClick={() => cancel(action.id)}
                   aria-label="Annuler cet envoi"
-                  title="Annuler"
+                  data-tooltip="Annuler cet envoi"
                 >
                   <X size={15} aria-hidden />
                 </button>
@@ -95,6 +112,7 @@ export function QueueList({
         </ul>
       )}
     </section>
+    </TooltipGroup>
   );
 }
 
@@ -105,9 +123,14 @@ function Gauge({ label, used, cap }: { label: string; used: number; cap: number 
       <p className="text-[11px] uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>
         {label}
       </p>
-      <p className="mt-0.5 text-[15px] font-semibold tabular-nums">
-        {used}
-        <span style={{ color: "var(--color-text-muted)" }}> / {cap}</span>
+      {/* transitions.dev · 26 — le compteur consommé tourne comme un rouleau.
+          C'est le seul nombre de l'app dont la variation mérite d'être suivie
+          du regard : il dit ce qu'il reste avant que le plafond bloque. */}
+      <p className="mt-0.5 flex items-baseline text-[15px] font-semibold tabular-nums">
+        <SpinningCounter value={used} cell={20} />
+        <span className="ml-0.5" style={{ color: "var(--color-text-muted)" }}>
+          / {cap}
+        </span>
       </p>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: "var(--color-surface-raised)" }}>
         <div

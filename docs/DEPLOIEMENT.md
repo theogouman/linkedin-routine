@@ -64,9 +64,9 @@ Crée une clé d'API **dédiée**. Ne jamais utiliser le jeton d'abonnement Clau
 (OAuth Claude Code / claude.ai) : son emploi hors des applications officielles
 viole les conditions d'utilisation d'Anthropic et exposerait le compte.
 
-Coût indicatif : à `claude-opus-5` en effort `low`, une génération de
-commentaire consomme quelques centaines de tokens. À 25 générations par jour,
-on reste sous quelques euros par mois.
+Coût indicatif : à `claude-haiku-4-5-20251001` (le modèle par défaut), une
+génération de commentaire consomme quelques centaines de tokens. À 25
+générations par jour, la facture se compte en centimes par mois.
 
 ## 5. Notifications push
 

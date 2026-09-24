@@ -350,3 +350,13 @@ L'utilisateur consulte l'historique de tout ce qui est parti depuis l'app : comm
   déclencheurs (commentaire publié, réponse envoyée, marquage manuel) ; le like
   n'en fait pas partie. L'implémentation s'y tient : liker puis commenter reste
   une séquence valide.
+- **Les réglages ont leur écran** (`/reglages`), là où la spec les décrivait
+  dans le même écran que la file. Deux questions différentes — ce qui part
+  aujourd'hui, et le régime du compte — se disputaient la ligne de flottaison.
+  FR-007 (« signaler visuellement qu'un process n'a pas été rédigé, dans les
+  réglages ») reste tenu, à la nouvelle adresse.
+- **Le modèle par défaut est Haiku**, FR-019 le laissant configurable. Rédiger
+  cinquante mots en suivant un process fourni est de la mise en forme
+  contrainte, pas du raisonnement : le coût mensuel passe de quelques euros à
+  quelques centimes. `ANTHROPIC_EFFORT` n'est transmis qu'aux modèles de la
+  famille Claude 5, qui sont les seuls à connaître `output_config`.

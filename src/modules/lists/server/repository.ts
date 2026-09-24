@@ -2,7 +2,7 @@ import "server-only";
 
 import { db, unwrap } from "@/shared/lib/db";
 import type { AccountRow, FetchState, ListRow } from "@/shared/lib/rows";
-import { normalizeProfileUrl, parseBulkProfileUrls } from "../lib/profile-url";
+import { normalizeProfileUrl, parseBulkProfileUrls } from "@/shared/lib/linkedin-url";
 
 /** Listes et comptes suivis (FR-001, FR-002). */
 
@@ -189,6 +189,41 @@ export async function removeAccountFromList(
     .eq("list_id", listId)
     .eq("account_id", accountId);
   if (error) throw new Error(`Retrait du compte : ${error.message}`);
+}
+
+/**
+ * Comptes dont l'identité visuelle est encore vide.
+ *
+ * Un compte importé en masse n'a ni nom ni photo tant qu'aucune publication
+ * n'a été récupérée pour lui — et un créateur qui n'a rien publié sur la
+ * fenêtre n'en aura jamais. D'où une passe d'enrichissement séparée, que cette
+ * requête alimente.
+ *
+ * Les profils restreints sont exclus : les réinterroger coûterait à chaque
+ * passe pour un résultat connu d'avance.
+ */
+export async function getAccountsMissingProfile(limit: number): Promise<AccountRow[]> {
+  return unwrap(
+    await db()
+      .from("accounts")
+      .select("*")
+      .neq("fetch_state", "restricted")
+      .or("avatar_url.is.null,name.is.null")
+      .order("created_at")
+      .limit(limit),
+    "lecture des comptes sans photo",
+  ) as AccountRow[];
+}
+
+/** Nombre de comptes encore sans photo ni nom — affiché dans les listes. */
+export async function countAccountsMissingProfile(): Promise<number> {
+  const { count, error } = await db()
+    .from("accounts")
+    .select("id", { count: "exact", head: true })
+    .neq("fetch_state", "restricted")
+    .or("avatar_url.is.null,name.is.null");
+  if (error) throw new Error(`Comptage des comptes sans photo : ${error.message}`);
+  return count ?? 0;
 }
 
 /** Comptes à interroger à la prochaine actualisation — hors profils restreints. */

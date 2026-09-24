@@ -5,10 +5,17 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, ExternalLink, Heart, MessageSquare, Undo2 } from "lucide-react";
+import { Check, ExternalLink, MessageSquare, Undo2 } from "lucide-react";
 import type { FeedPost } from "@/modules/feed/server/repository";
 import { Avatar } from "@/shared/components/Avatar";
 import { Composer } from "@/shared/components/Composer";
+import { InlineToast } from "@/shared/motion/InlineToast";
+import { LearnMoreLink } from "@/shared/motion/LearnMoreLink";
+import { LikeButton } from "@/shared/motion/LikeButton";
+import { PanelReveal } from "@/shared/motion/PanelReveal";
+import { SuccessCheck } from "@/shared/motion/SuccessCheck";
+import { TiltCard } from "@/shared/motion/TiltCard";
+import { TooltipGroup } from "@/shared/motion/Tooltip";
 import {
   generateForPostAction,
   ignorePostAction,
@@ -42,6 +49,7 @@ const MEDIA_LABELS: Record<string, string> = {
 export function PostCard({ post }: { post: FeedPost }) {
   const router = useRouter();
   const [composerOpen, setComposerOpen] = useState(false);
+  const [justQueued, setJustQueued] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const media = (Array.isArray(post.media) ? post.media : []) as MediaEntry[];
@@ -61,12 +69,21 @@ export function PostCard({ post }: { post: FeedPost }) {
           ? `${success} — envoi ${scheduledLabel(result.scheduledFor)}.`
           : success,
       );
+      if (result.scheduledFor) {
+        setJustQueued(true);
+        window.setTimeout(() => setJustQueued(false), 2600);
+      }
       router.refresh();
     });
   };
 
   return (
-    <article className="nc-card overflow-hidden" data-processed={processed}>
+    <TooltipGroup className="nc-tt-block">
+    {/* transitions.dev · 19 — inclinaison 3D au pointeur, souris uniquement,
+        et coupée pendant la rédaction : une carte qui bouge sous un curseur
+        de texte rendrait la relecture pénible. */}
+    <TiltCard className="nc-card t-resize" glare={false} disabled={composerOpen}>
+    <article data-processed={processed}>
       <div className="flex items-start gap-3 p-4 pb-3">
         <Avatar src={post.author_avatar_url} name={post.author_name} />
         <div className="min-w-0 flex-1">
@@ -107,17 +124,25 @@ export function PostCard({ post }: { post: FeedPost }) {
       ) : null}
 
       {external && post.post_url ? (
-        <a
+        <LearnMoreLink
           href={post.post_url}
-          target="_blank"
-          rel="noreferrer noopener"
           className="mx-4 mt-3 flex items-center justify-between gap-2 rounded-[12px] border px-3 py-2.5 text-[13px]"
-          style={{ borderColor: "var(--color-border-default)", color: "var(--color-text-secondary)" }}
         >
-          <span>{MEDIA_LABELS[external.type] ?? external.title ?? "Média externe"}</span>
-          <ExternalLink size={14} aria-hidden />
-        </a>
+          <span style={{ color: "var(--color-text-secondary)" }}>
+            {MEDIA_LABELS[external.type] ?? external.title ?? "Média externe"}
+          </span>
+        </LearnMoreLink>
       ) : null}
+
+      <InlineToast shown={justQueued} className="mx-4 mt-3">
+        <p
+          className="flex items-center gap-2 rounded-[12px] px-3 py-2 text-[13px]"
+          style={{ background: "var(--nc-status-accepted-bg)", color: "var(--nc-status-accepted-text)" }}
+        >
+          <SuccessCheck shown={justQueued} size={15} />
+          En file — rien ne part avant l&apos;heure prévue.
+        </p>
+      </InlineToast>
 
       {post.pendingAction ? (
         <p
@@ -131,17 +156,15 @@ export function PostCard({ post }: { post: FeedPost }) {
       ) : null}
 
       <div className="mt-3 flex items-center gap-2 border-t px-4 py-3" style={{ borderColor: "var(--color-border-default)" }}>
-        <button
-          type="button"
-          className="nc-icon-btn"
-          data-active={post.liked_at !== null}
+        {/* transitions.dev · 23 — le cœur se remplit avec un pop et part en
+            gerbe. C'est le seul geste de l'app qui coûte un clic et rien
+            d'autre : il mérite d'être satisfaisant. */}
+        <LikeButton
+          liked={post.liked_at !== null}
           disabled={pending || post.liked_at !== null}
-          onClick={() => run(() => likePostAction(post.id), "Like en file")}
-          aria-label="Liker"
-          title={post.liked_at ? "Déjà liké" : "Liker"}
-        >
-          <Heart size={16} fill={post.liked_at ? "currentColor" : "none"} aria-hidden />
-        </button>
+          onLike={() => run(() => likePostAction(post.id), "Like en file")}
+          label={post.liked_at ? "Déjà liké" : "Liker"}
+        />
 
         <button
           type="button"
@@ -156,16 +179,13 @@ export function PostCard({ post }: { post: FeedPost }) {
         <div className="flex-1" />
 
         {post.post_url ? (
-          <a
+          <LearnMoreLink
             href={post.post_url}
-            target="_blank"
-            rel="noreferrer noopener"
             className="nc-icon-btn"
-            aria-label="Ouvrir dans LinkedIn"
-            title="Ouvrir dans LinkedIn"
+            icon={<ExternalLink size={15} aria-hidden />}
           >
-            <ExternalLink size={15} aria-hidden />
-          </a>
+            <span className="sr-only">Ouvrir dans LinkedIn</span>
+          </LearnMoreLink>
         ) : null}
 
         {processed ? (
@@ -175,7 +195,7 @@ export function PostCard({ post }: { post: FeedPost }) {
             disabled={pending}
             onClick={() => run(() => restorePostAction(post.id), "Remis à traiter")}
             aria-label="Remettre à traiter"
-            title="Remettre à traiter"
+            data-tooltip="Remettre à traiter"
           >
             <Undo2 size={15} aria-hidden />
           </button>
@@ -191,20 +211,33 @@ export function PostCard({ post }: { post: FeedPost }) {
         )}
       </div>
 
-      {composerOpen ? (
-        <div className="border-t px-4 py-3" style={{ borderColor: "var(--color-border-default)" }}>
-          <Composer
-            placeholder="Ton commentaire…"
-            generateLabel="Générer un commentaire"
-            onGenerate={() => generateForPostAction(post.id)}
-            onSubmit={(body, origin) => submitComment(post.id, body, origin)}
-            onDone={() => {
-              setComposerOpen(false);
-              router.refresh();
-            }}
-          />
-        </div>
-      ) : null}
+      {/* transitions.dev · 07 — le composer GLISSE dans la carte au lieu
+          d'apparaître d'un coup et de pousser tout ce qui suit. */}
+      <PanelReveal
+        open={composerOpen}
+        className="border-t px-4 py-3"
+        style={
+          {
+            borderColor: "var(--color-border-default)",
+            // La course par défaut du snippet (100 px) est celle d'un panneau
+            // plein écran ; ici le composer glisse dans une carte.
+            "--panel-translate-y": "24px",
+          } as React.CSSProperties
+        }
+      >
+        <Composer
+          placeholder="Ton commentaire…"
+          generateLabel="Générer un commentaire"
+          onGenerate={() => generateForPostAction(post.id)}
+          onSubmit={(body, origin) => submitComment(post.id, body, origin)}
+          onDone={() => {
+            setComposerOpen(false);
+            router.refresh();
+          }}
+        />
+      </PanelReveal>
     </article>
+    </TiltCard>
+    </TooltipGroup>
   );
 }

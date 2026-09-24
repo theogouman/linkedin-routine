@@ -1,4 +1,8 @@
-import { getAccounts, getLists } from "@/modules/lists/server/repository";
+import {
+  countAccountsMissingProfile,
+  getAccounts,
+  getLists,
+} from "@/modules/lists/server/repository";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ListsManager } from "./ListsManager";
@@ -8,7 +12,11 @@ export const metadata = { title: "Listes — Routine" };
 
 /** Curation des comptes suivis (US-1, FR-001, FR-002). */
 export default async function ListsPage() {
-  const [lists, accounts] = await Promise.all([getLists(), getAccounts()]);
+  const [lists, accounts, missingProfile] = await Promise.all([
+    getLists(),
+    getAccounts(),
+    countAccountsMissingProfile(),
+  ]);
 
   const restricted = accounts.filter((account) => account.fetch_state === "restricted").length;
 
@@ -24,6 +32,7 @@ export default async function ListsPage() {
       />
 
       <ListsManager
+        missingProfile={missingProfile}
         lists={lists.map((list) => ({
           id: list.id,
           name: list.name,

@@ -3,10 +3,16 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, CornerDownRight, ExternalLink, Heart, Reply } from "lucide-react";
+import { Check, CornerDownRight, ExternalLink, Reply } from "lucide-react";
 import type { InboxComment } from "@/modules/inbox/server/repository";
 import { Avatar } from "@/shared/components/Avatar";
 import { Composer } from "@/shared/components/Composer";
+import { InlineToast } from "@/shared/motion/InlineToast";
+import { LearnMoreLink } from "@/shared/motion/LearnMoreLink";
+import { LikeButton } from "@/shared/motion/LikeButton";
+import { PanelReveal } from "@/shared/motion/PanelReveal";
+import { SuccessCheck } from "@/shared/motion/SuccessCheck";
+import { TooltipGroup } from "@/shared/motion/Tooltip";
 import {
   generateForCommentAction,
   ignoreCommentAction,
@@ -25,6 +31,7 @@ import { relativeTime, scheduledLabel } from "@/shared/lib/format";
 export function InboxItem({ comment }: { comment: InboxComment }) {
   const router = useRouter();
   const [replyOpen, setReplyOpen] = useState(false);
+  const [justQueued, setJustQueued] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const processed = comment.processed_at !== null;
@@ -43,12 +50,17 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
       toast.success(
         result.scheduledFor ? `${success} — envoi ${scheduledLabel(result.scheduledFor)}.` : success,
       );
+      if (result.scheduledFor) {
+        setJustQueued(true);
+        window.setTimeout(() => setJustQueued(false), 2600);
+      }
       router.refresh();
     });
   };
 
   return (
-    <article className="nc-card overflow-hidden" style={{ marginLeft: indent }}>
+    <TooltipGroup className="nc-tt-block">
+    <article className="nc-card t-resize overflow-hidden" style={{ marginLeft: indent }}>
       {comment.post ? (
         <p
           className="truncate border-b px-4 py-2 text-[12px]"
@@ -86,6 +98,16 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
         </p>
       ) : null}
 
+      <InlineToast shown={justQueued} className="mx-4 mt-3">
+        <p
+          className="flex items-center gap-2 rounded-[12px] px-3 py-2 text-[13px]"
+          style={{ background: "var(--nc-status-accepted-bg)", color: "var(--nc-status-accepted-text)" }}
+        >
+          <SuccessCheck shown={justQueued} size={15} />
+          En file — rien ne part avant l&apos;heure prévue.
+        </p>
+      </InlineToast>
+
       {comment.pendingAction ? (
         <p
           className="mx-4 mt-3 flex items-center gap-2 rounded-[12px] px-3 py-2 text-[13px]"
@@ -97,16 +119,12 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
       ) : null}
 
       <div className="mt-3 flex items-center gap-2 border-t px-4 py-3" style={{ borderColor: "var(--color-border-default)" }}>
-        <button
-          type="button"
-          className="nc-icon-btn"
-          data-active={comment.liked_at !== null}
+        <LikeButton
+          liked={comment.liked_at !== null}
           disabled={pending || comment.liked_at !== null}
-          onClick={() => run(() => likeCommentAction(comment.id), "Like en file")}
-          aria-label="Liker ce commentaire"
-        >
-          <Heart size={16} fill={comment.liked_at ? "currentColor" : "none"} aria-hidden />
-        </button>
+          onLike={() => run(() => likeCommentAction(comment.id), "Like en file")}
+          label={comment.liked_at ? "Déjà liké" : "Liker ce commentaire"}
+        />
 
         <button
           type="button"
@@ -121,15 +139,13 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
         <div className="flex-1" />
 
         {comment.comment_url ? (
-          <a
+          <LearnMoreLink
             href={comment.comment_url}
-            target="_blank"
-            rel="noreferrer noopener"
             className="nc-icon-btn"
-            aria-label="Ouvrir dans LinkedIn"
+            icon={<ExternalLink size={15} aria-hidden />}
           >
-            <ExternalLink size={15} aria-hidden />
-          </a>
+            <span className="sr-only">Ouvrir dans LinkedIn</span>
+          </LearnMoreLink>
         ) : null}
 
         {!processed ? (
@@ -144,20 +160,28 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
         ) : null}
       </div>
 
-      {replyOpen ? (
-        <div className="border-t px-4 py-3" style={{ borderColor: "var(--color-border-default)" }}>
-          <Composer
-            placeholder="Ta réponse…"
-            generateLabel="Générer une réponse"
-            onGenerate={() => generateForCommentAction(comment.id)}
-            onSubmit={(body, origin) => submitReply(comment.id, body, origin)}
-            onDone={() => {
-              setReplyOpen(false);
-              router.refresh();
-            }}
-          />
-        </div>
-      ) : null}
+      <PanelReveal
+        open={replyOpen}
+        className="border-t px-4 py-3"
+        style={
+          {
+            borderColor: "var(--color-border-default)",
+            "--panel-translate-y": "24px",
+          } as React.CSSProperties
+        }
+      >
+        <Composer
+          placeholder="Ta réponse…"
+          generateLabel="Générer une réponse"
+          onGenerate={() => generateForCommentAction(comment.id)}
+          onSubmit={(body, origin) => submitReply(comment.id, body, origin)}
+          onDone={() => {
+            setReplyOpen(false);
+            router.refresh();
+          }}
+        />
+      </PanelReveal>
     </article>
+    </TooltipGroup>
   );
 }

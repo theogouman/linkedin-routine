@@ -155,7 +155,11 @@ async function syncPosts(
     const first = outcome.posts[0];
     if (first) {
       await ports.setAccountState(account.id, "ok", null);
-      if (!account.hasProfileMetadata) {
+      // Rafraîchi à CHAQUE passe réussie, pas seulement quand il manque.
+      // Les URLs d'avatars LinkedIn sont signées et expirent : figer la
+      // première vue ferait disparaître les photos au bout de quelques
+      // semaines, sans que rien ne signale pourquoi.
+      if (first.author.avatarUrl !== null || !account.hasProfileMetadata) {
         await ports.enrichAccount(account.id, {
           name: first.author.name,
           headline: null,

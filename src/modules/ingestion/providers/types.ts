@@ -104,4 +104,14 @@ export interface IngestionProvider {
    * déduites de la première publication récupérée.
    */
   fetchProfile?(profileUrl: string): Promise<FetchedProfile | null>;
+  /**
+   * Même chose, en lot.
+   *
+   * Séparé de `fetchProfile` parce que la différence n'est pas cosmétique :
+   * amorcer 372 comptes importés en une fois coûte un run d'actor au lieu de
+   * 372, et les fournisseurs facturent le démarrage autant que le résultat.
+   * Les profils absents de la réponse sont simplement omis — un profil
+   * introuvable n'est pas une erreur de lot.
+   */
+  fetchProfiles?(profileUrls: string[]): Promise<FetchedProfile[]>;
 }

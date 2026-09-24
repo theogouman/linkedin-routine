@@ -208,10 +208,71 @@ describe("ApifyIngestionProvider.fetchCommentsForPosts", () => {
 });
 
 describe("ApifyIngestionProvider.fetchProfile", () => {
-  it("renvoie null sans actor de profil configuré, sans appel réseau", async () => {
+  it("utilise un actor de profil par défaut, sans configuration", async () => {
+    // Auparavant l'enrichissement était muet tant qu'`APIFY_PROFILE_ACTOR`
+    // n'était pas renseigné : les comptes importés en masse restaient sans
+    // nom ni photo, et rien ne le signalait.
+    const { provider: p, calls } = provider([
+      { body: [{ publicIdentifier: "alice", firstName: "Alice", photo: "a.jpg" }] },
+    ]);
+    const profile = await p.fetchProfile("https://www.linkedin.com/in/alice");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toContain("harvestapi~linkedin-profile-scraper");
+    expect(profile?.avatarUrl).toBe("a.jpg");
+  });
+
+  it("n'appelle rien pour un lot vide", async () => {
     const { provider: p, calls } = provider([{ body: [] }]);
-    expect(await p.fetchProfile("https://www.linkedin.com/in/alice")).toBeNull();
+    expect(await p.fetchProfiles([])).toEqual([]);
     expect(calls).toHaveLength(0);
+  });
+
+  it("apparie les profils d'un lot par identifiant, pas par position", async () => {
+    const { provider: p } = provider([
+      {
+        body: [
+          { publicIdentifier: "bob", firstName: "Bob", photo: "b.jpg" },
+          { publicIdentifier: "alice", firstName: "Alice", photo: "a.jpg" },
+        ],
+      },
+    ]);
+    const profiles = await p.fetchProfiles([
+      "https://www.linkedin.com/in/alice",
+      "https://www.linkedin.com/in/bob",
+    ]);
+    expect(profiles.map((entry) => [entry.profileUrl, entry.avatarUrl])).toEqual([
+      ["https://www.linkedin.com/in/bob", "b.jpg"],
+      ["https://www.linkedin.com/in/alice", "a.jpg"],
+    ]);
+  });
+
+  it("rend ce qui a abouti quand un lot échoue", async () => {
+    // Un échec de lot ne doit pas vider l'enrichissement : l'écran des listes
+    // s'afficherait sans une seule photo pour une panne d'un seul appel.
+    const { provider: p } = provider([{ status: 503, body: { error: "service unavailable" } }]);
+    expect(await p.fetchProfiles(["https://www.linkedin.com/in/alice"])).toEqual([]);
+  });
+
+  it("prend la plus grande taille quand la photo est un objet", async () => {
+    const { provider: p } = provider([
+      {
+        body: [
+          {
+            publicIdentifier: "alice",
+            firstName: "Alice",
+            profilePicture: {
+              url: "small.jpg",
+              sizes: [
+                { width: 100, height: 100, url: "100.jpg" },
+                { width: 800, height: 800, url: "800.jpg" },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+    const profiles = await p.fetchProfiles(["https://www.linkedin.com/in/alice"]);
+    expect(profiles[0]?.avatarUrl).toBe("800.jpg");
   });
 
   it("recompose un nom depuis prénom + nom", async () => {
