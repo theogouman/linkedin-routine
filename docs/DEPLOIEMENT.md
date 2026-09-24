@@ -114,6 +114,11 @@ D'où la répartition en trois étages :
 | pg_cron (Supabase) | 1×/jour, 16 h UTC | Seconde vérification, pour tenir les 2/jour de FR-014 | idem |
 | Ouverture de l'app | à chaque session | Filet : fait partir ce qui est dû même sans ordonnanceur | `after()` dans le layout |
 
+> `vercel.json` n'accepte **que** `path` et `schedule` dans une entrée `crons`.
+> Toute clé supplémentaire — un `comment`, par exemple — fait échouer le build
+> avec `Invalid vercel.json - crons[0] should NOT have additional property`.
+> Les explications vivent donc ici, pas dans le fichier.
+
 #### Mettre en place pg_cron
 
 Console Supabase → **SQL Editor** → colle

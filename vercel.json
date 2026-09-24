@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "comment": "Vérification serveur des nouveautés + notification push (FR-014). Une fois par jour : c'est la seule cadence qu'autorise le plan Hobby, et elle suffit — FR-014 demande 2 vérifications/jour, la seconde est assurée par l'actualisation à l'ouverture de l'app.",
       "path": "/api/cron/notify",
       "schedule": "0 7 * * *"
     }
