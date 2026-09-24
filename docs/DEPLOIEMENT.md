@@ -15,10 +15,17 @@ bloque avec un message qui nomme la variable.
    dans l'éditeur SQL.
 3. Relève `SUPABASE_URL` et la **service role key**.
 
-Il n'y a ni RLS ni clé publique, volontairement : l'app est mono-utilisateur,
-tout l'accès données se fait côté serveur derrière le cookie de session, et le
-navigateur ne reçoit jamais de clé Supabase. Ajouter de la RLS ici donnerait
-une impression de défense sans frontière réelle supplémentaire.
+L'app est mono-utilisateur : aucun `user_id`, tout l'accès données se fait
+côté serveur derrière le cookie de session, et le navigateur ne reçoit jamais
+de clé Supabase.
+
+La migration 003 active malgré tout la RLS sur toutes les tables, **sans aucune
+politique**. C'est ce qui ferme l'API PostgREST à `anon` et `authenticated`
+— que l'app n'utilise pas — pendant que `service_role` la contourne
+nativement. L'app ne change pas d'une ligne. Sans cela, la seule chose qui
+protégerait les tables serait que la clé anon ne soit publiée nulle part, et
+ce n'est pas une frontière. L'analyseur Supabase signalera ensuite
+`rls_enabled_no_policy` en INFO : c'est le comportement voulu.
 
 ## 2. Récupération (Apify)
 
@@ -137,12 +144,31 @@ update drain_config
  where id = 1;
 ```
 
-> ⚠️ **Deployment Protection.** Si la protection SSO de Vercel est active sur
-> le domaine visé, ces appels reçoivent une redirection d'authentification au
-> lieu de la route, et rien ne part jamais. Trois issues : la désactiver,
-> pointer `app_url` sur un domaine personnalisé (la protection
-> « all except custom domains » les épargne), ou ajouter un
-> **Protection Bypass for Automation**.
+#### Deployment Protection : preview uniquement
+
+La protection Vercel (« Vercel Authentication ») doit être réglée sur
+**Preview**, pas sur *All Deployments*. Si elle couvre la production :
+
+- pg_cron reçoit une redirection d'authentification au lieu de la route, et
+  **rien ne part jamais** ;
+- et surtout, **la PWA elle-même devient inutilisable** : sur iPhone, l'app
+  installée heurterait un mur d'authentification Vercel avant même d'atteindre
+  l'écran de mot de passe.
+
+Le *Protection Bypass for Automation* résoudrait le premier point mais pas le
+second. Sans domaine personnalisé, la production doit donc être ouverte au
+réseau — ce qui est sans conséquence, puisque c'est l'app qui se protège :
+
+| Ce qui reste public | Pourquoi c'est sans risque |
+|---|---|
+| `/login` | Formulaire de mot de passe ; c'est la porte |
+| `/manifest.webmanifest`, `/sw.js`, `/offline`, `/icons/*`, `/_next/*` | Statiques, aucun contenu |
+| `/api/cron/*` | Répond 401 sans le `CRON_SECRET`, 503 s'il n'est pas configuré |
+
+Tout le reste est fermé par le middleware, qui ferme **par défaut** : on y
+liste ce qui est public, jamais ce qui est protégé, pour qu'une route ajoutée
+demain le soit sans qu'on y pense. Un test
+(`src/middleware-surface.test.ts`) fige cette liste.
 
 Vérification :
 

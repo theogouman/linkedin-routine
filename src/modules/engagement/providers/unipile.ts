@@ -41,18 +41,41 @@ export interface UnipileOptions {
 export class UnipileWriteProvider implements WriteProvider {
   readonly name = "unipile";
 
-  private readonly dsn: string;
-  private readonly apiKey: string;
-  private readonly accountId: string;
+  /**
+   * Identifiants résolus au premier envoi, pas à la construction — même raison
+   * que côté récupération : la purge de file instancie ce fournisseur à chaque
+   * passage, y compris quand la file est vide. Exiger le DSN dès le
+   * constructeur faisait échouer ces passages à vide tant que le compte
+   * n'était pas provisionné.
+   */
+  private credentials: { dsn: string; apiKey: string; accountId: string } | null;
+  private readonly options: UnipileOptions;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
 
   constructor(options: UnipileOptions = {}) {
-    this.dsn = (options.dsn ?? requireEnv("UNIPILE_DSN")).replace(/\/+$/, "");
-    this.apiKey = options.apiKey ?? requireEnv("UNIPILE_API_KEY");
-    this.accountId = options.accountId ?? requireEnv("UNIPILE_ACCOUNT_ID");
+    this.options = options;
+    this.credentials =
+      options.dsn && options.apiKey && options.accountId
+        ? {
+            dsn: options.dsn.replace(/\/+$/, ""),
+            apiKey: options.apiKey,
+            accountId: options.accountId,
+          }
+        : null;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 30_000;
+  }
+
+  private resolve(): { dsn: string; apiKey: string; accountId: string } {
+    if (this.credentials === null) {
+      this.credentials = {
+        dsn: (this.options.dsn ?? requireEnv("UNIPILE_DSN")).replace(/\/+$/, ""),
+        apiKey: this.options.apiKey ?? requireEnv("UNIPILE_API_KEY"),
+        accountId: this.options.accountId ?? requireEnv("UNIPILE_ACCOUNT_ID"),
+      };
+    }
+    return this.credentials;
   }
 
   private route(key: keyof typeof ROUTES): string {
@@ -61,15 +84,16 @@ export class UnipileWriteProvider implements WriteProvider {
   }
 
   private async request(path: string, body: unknown): Promise<unknown> {
+    const { dsn, apiKey } = this.resolve();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await this.fetchImpl(`${this.dsn}${path}`, {
+      const response = await this.fetchImpl(`${dsn}${path}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
           accept: "application/json",
-          "X-API-KEY": this.apiKey,
+          "X-API-KEY": apiKey,
         },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -118,7 +142,7 @@ export class UnipileWriteProvider implements WriteProvider {
       encodeURIComponent(input.providerPostId),
     );
     const raw = await this.request(path, {
-      account_id: this.accountId,
+      account_id: this.resolve().accountId,
       text: input.text,
       ...(input.media ? { attachment: input.media.url } : {}),
     });
@@ -131,7 +155,7 @@ export class UnipileWriteProvider implements WriteProvider {
       encodeURIComponent(input.providerPostId),
     );
     const raw = await this.request(path, {
-      account_id: this.accountId,
+      account_id: this.resolve().accountId,
       text: input.text,
       comment_id: input.providerCommentId,
       ...(input.media ? { attachment: input.media.url } : {}),
@@ -141,7 +165,7 @@ export class UnipileWriteProvider implements WriteProvider {
 
   async publishLike(input: PublishLikeInput): Promise<PublishResult> {
     const raw = await this.request(this.route("reaction"), {
-      account_id: this.accountId,
+      account_id: this.resolve().accountId,
       post_id: input.providerPostId,
       ...(input.targetType === "comment" && input.providerCommentId
         ? { comment_id: input.providerCommentId }

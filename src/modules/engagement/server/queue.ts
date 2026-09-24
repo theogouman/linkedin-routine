@@ -169,6 +169,14 @@ export async function drainQueue(
   }
 
   const due = await getDueActions(now, options.limit ?? 3);
+  if (due.length === 0) return report;
+
+  // Le fournisseur d'écriture n'est construit QUE s'il y a quelque chose à
+  // envoyer. Son constructeur exige ses identifiants : l'instancier plus haut
+  // faisait échouer chaque passage tant que le compte n'était pas provisionné,
+  // alors même que la file était vide et qu'il n'y avait rien à faire. La
+  // purge tourne toutes les cinq minutes ; elle doit être silencieuse quand
+  // elle n'a rien à faire, sans quoi les vraies pannes se noient dans le bruit.
   const provider = getWriteProvider();
 
   for (const action of due) {
