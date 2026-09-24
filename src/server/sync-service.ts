@@ -182,8 +182,25 @@ const SYNC_WALL_CLOCK_MS = readIntEnv("SYNC_BUDGET_MS", 45_000);
 const SYNC_MAX_ACCOUNTS = readIntEnv("SYNC_MAX_ACCOUNTS_PER_RUN", 200);
 const SYNC_CONCURRENCY = readIntEnv("SYNC_CONCURRENCY", 4);
 
+export interface SyncBudget {
+  /** Durée au bout de laquelle on n'entame plus de compte. */
+  budgetMs?: number;
+  /** Plafond de comptes pour ce passage. */
+  maxAccounts?: number;
+}
+
+/**
+ * Le budget dépend de QUI appelle, parce que la limite de durée en dépend.
+ *
+ * Une action déclenchée depuis l'écran tourne dans la fonction de page et doit
+ * rendre la main vite — l'interface relance elle-même le tour suivant. La
+ * vérification quotidienne, elle, est une route dédiée à 300 s : lui imposer le
+ * budget de l'interface la condamnerait à ne jamais couvrir tous les comptes,
+ * quel que soit le nombre de jours qui passent.
+ */
 export async function synchronize(
   scope: "all" | "posts" | "comments" = "all",
+  budget: SyncBudget = {},
 ): Promise<SyncOutcome> {
   const startedAt = Date.now();
   const runId = await startSyncRun(scope);
@@ -199,9 +216,9 @@ export async function synchronize(
       maxPostsPerAccount: readIntEnv("MAX_POSTS_PER_ACCOUNT", 20),
       maxCommentsPerPost: readIntEnv("MAX_COMMENTS_PER_POST", 50),
       scope,
-      maxAccountsPerRun: SYNC_MAX_ACCOUNTS,
+      maxAccountsPerRun: budget.maxAccounts ?? SYNC_MAX_ACCOUNTS,
       concurrency: SYNC_CONCURRENCY,
-      deadline: new Date(startedAt + SYNC_WALL_CLOCK_MS),
+      deadline: new Date(startedAt + (budget.budgetMs ?? SYNC_WALL_CLOCK_MS)),
     });
 
     await finishSyncRun(runId, {
