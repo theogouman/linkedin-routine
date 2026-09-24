@@ -11,7 +11,44 @@ import {
   type GenerationContext,
 } from "../lib/prompt";
 import { isPlaceholder, PROCESS_FILES, type ProcessKind } from "../lib/process-files";
-import { DEFAULT_EFFORT, DEFAULT_MODEL, supportsEffort, type Effort } from "../lib/model";
+import {
+  DEFAULT_EFFORT,
+  DEFAULT_MODEL,
+  normalizeGenerationSettings,
+  supportsEffort,
+  type GenerationSettings,
+} from "../lib/model";
+import { readSetting, writeSetting } from "@/shared/lib/settings";
+
+/** Clé du réglage de génération dans la table `settings`. */
+export const GENERATION_SETTING_KEY = "generation_model";
+
+/**
+ * Réglage effectif : la base d'abord, l'environnement ensuite, le défaut en
+ * dernier.
+ *
+ * L'ordre n'est pas arbitraire. Le modèle était choisi uniquement par
+ * `ANTHROPIC_MODEL`, donc changeable seulement par un redéploiement — alors
+ * que c'est exactement le genre de réglage qu'on veut pouvoir bouger depuis le
+ * téléphone après avoir lu trois propositions fades. La variable reste
+ * prioritaire sur le défaut, pour ne pas casser un déploiement qui s'y fie.
+ */
+export async function loadGenerationSettings(): Promise<GenerationSettings> {
+  const stored = await readSetting<unknown>(GENERATION_SETTING_KEY);
+  if (stored !== null) return normalizeGenerationSettings(stored);
+  return normalizeGenerationSettings({
+    model: readEnv("ANTHROPIC_MODEL") ?? DEFAULT_MODEL,
+    effort: readEnv("ANTHROPIC_EFFORT") ?? DEFAULT_EFFORT,
+  });
+}
+
+export async function saveGenerationSettings(
+  settings: GenerationSettings,
+): Promise<GenerationSettings> {
+  const normalized = normalizeGenerationSettings(settings);
+  await writeSetting(GENERATION_SETTING_KEY, normalized);
+  return normalized;
+}
 
 /**
  * Génération assistée (FR-006, FR-019).
@@ -70,8 +107,7 @@ export async function generateComment(
   context: GenerationContext,
 ): Promise<GenerationResult> {
   const processMarkdown = await readProcess(context.kind);
-  const model = readEnv("ANTHROPIC_MODEL") ?? DEFAULT_MODEL;
-  const effort = (readEnv("ANTHROPIC_EFFORT") ?? DEFAULT_EFFORT) as Effort;
+  const { model, effort } = await loadGenerationSettings();
 
   try {
     const response = await anthropic().messages.create({

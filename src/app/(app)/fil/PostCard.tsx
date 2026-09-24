@@ -5,19 +5,18 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  Check,
-  ExternalLink,
-  MessageSquare,
-  MoreHorizontal,
-  Trash2,
-  Undo2,
-} from "lucide-react";
+import { Check, MessageSquare, MoreHorizontal, Undo2 } from "lucide-react";
 import type { FeedPost } from "@/modules/feed/server/repository";
 import { Avatar } from "@/shared/components/Avatar";
 import { Composer } from "@/shared/components/Composer";
 import { ListPickerMenu } from "@/shared/components/ListPickerMenu";
 import { ReactionIcon } from "@/shared/components/ReactionIcon";
+import {
+  ArrowNorthEastIcon,
+  DeleteIcon,
+  DependencyIcon,
+  ViewOffIcon,
+} from "@/shared/components/NotionIcons";
 import { Dropdown } from "@/shared/motion/Dropdown";
 import { ExpandableText } from "@/shared/motion/ExpandableText";
 import { InlineToast } from "@/shared/motion/InlineToast";
@@ -213,6 +212,20 @@ export function PostCard({
           >
             {(close) => (
               <>
+                {post.post_url ? (
+                  <a
+                    href={post.post_url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    role="menuitem"
+                    className="nc-menu-item"
+                    onClick={close}
+                  >
+                    <ArrowNorthEastIcon size={14} />
+                    Ouvrir la publication
+                  </a>
+                ) : null}
+
                 {processed ? (
                   <button
                     type="button"
@@ -236,7 +249,7 @@ export function PostCard({
                       ignore();
                     }}
                   >
-                    <Check size={14} aria-hidden />
+                    <ViewOffIcon size={14} />
                     Ignorer
                   </button>
                 )}
@@ -252,7 +265,7 @@ export function PostCard({
                     setListsOpen(true);
                   }}
                 >
-                  <MoreHorizontal size={14} aria-hidden />
+                  <DependencyIcon size={14} />
                   Changer de liste
                 </button>
 
@@ -269,7 +282,7 @@ export function PostCard({
                     onRemoved?.(post.account_id);
                   }}
                 >
-                  <Trash2 size={14} aria-hidden />
+                  <DeleteIcon size={14} />
                   Supprimer le créateur
                 </button>
               </>
@@ -387,17 +400,6 @@ export function PostCard({
             </p>
           ) : null}
 
-          <div className="flex-1" />
-
-          {post.post_url ? (
-            <LearnMoreLink
-              href={post.post_url}
-              className="nc-icon-btn"
-              icon={<ExternalLink size={15} aria-hidden />}
-            >
-              <span className="sr-only">Ouvrir dans LinkedIn</span>
-            </LearnMoreLink>
-          ) : null}
         </TooltipGroup>
 
         {/* Ouvert d'emblée : commenter est le geste normal de cet écran. */}

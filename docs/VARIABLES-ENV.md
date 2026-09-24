@@ -322,6 +322,12 @@ centaines de tokens. 25 générations par jour se comptent en centimes par mois.
 
 ### `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT` — optionnelles
 
+> Le modèle et l'effort se règlent **depuis l'écran Réglages**, et ce réglage
+> est stocké en base. Ces deux variables ne servent plus que de valeur de
+> départ, avant tout réglage enregistré : c'est le genre de choix qu'on veut
+> pouvoir bouger depuis le téléphone après avoir lu trois propositions fades,
+> pas après un redéploiement.
+
 ```
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 ANTHROPIC_EFFORT=low          # low | medium | high | xhigh | max

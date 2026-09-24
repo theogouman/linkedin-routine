@@ -13,9 +13,10 @@ import { ListPickerMenu } from "@/shared/components/ListPickerMenu";
 import {
   CheckmarkIcon,
   ClockAlternateIcon,
-  ReorderIcon,
+  ListIcon,
 } from "@/shared/components/NotionIcons";
 import { scrollAppToTop } from "@/shared/lib/scroll";
+import { useFeedNavigation } from "./FeedShell";
 
 /**
  * Filtres du feed (FR-003, FR-004).
@@ -46,7 +47,10 @@ export function FeedToolbar({
 }) {
   const router = useRouter();
   const params = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const [refreshing, startRefresh] = useTransition();
+  // La transition de navigation appartient à la coquille : c'est elle qui
+  // rend le squelette pendant que le serveur travaille.
+  const { navigate } = useFeedNavigation();
 
   // État affiché, découplé de l'URL.
   //
@@ -78,7 +82,7 @@ export function FeedToolbar({
     // Dans une transition : la navigation ne bloque pas la peinture du nouvel
     // état du bouton, et React garde l'écran précédent visible pendant que le
     // segment se rend au lieu de le vider.
-    startTransition(() => {
+    navigate(() => {
       router.push(query === "" ? "/fil" : `/fil?${query}`);
     });
     // Changer de filtre change la file : rester au milieu de l'ancienne
@@ -111,7 +115,7 @@ export function FeedToolbar({
   };
 
   const refresh = () => {
-    startTransition(async () => {
+    startRefresh(async () => {
       const result = await refreshNow("all");
       if (!result.ok) {
         toast.error(result.message ?? "Actualisation impossible.");
@@ -141,10 +145,10 @@ export function FeedToolbar({
             onClick={toggle}
             aria-haspopup="menu"
             aria-expanded={open}
-            className="nc-btn nc-btn--ghost nc-btn--sm shrink-0"
+            className="nc-btn nc-btn--surface nc-btn--sm shrink-0"
             data-active={count > 0}
           >
-            <ReorderIcon />
+            <ListIcon />
             {listLabel}
             <ChevronDown
               size={14}
@@ -181,7 +185,7 @@ export function FeedToolbar({
       <button
         type="button"
         onClick={toggleScope}
-        className="nc-btn nc-btn--ghost nc-btn--sm shrink-0"
+        className="nc-btn nc-btn--surface nc-btn--sm shrink-0"
         data-active={shownScope === "processed"}
         aria-pressed={shownScope === "processed"}
       >
@@ -205,12 +209,12 @@ export function FeedToolbar({
       <button
         type="button"
         onClick={refresh}
-        disabled={pending}
+        disabled={refreshing}
         className="nc-icon-btn shrink-0"
         data-tooltip={`Dernière actualisation : ${lastSyncLabel}`}
         aria-label="Actualiser"
       >
-        {pending ? <MatrixLoader variant="orbit" /> : <RefreshCw size={16} aria-hidden />}
+        {refreshing ? <MatrixLoader variant="orbit" /> : <RefreshCw size={16} aria-hidden />}
       </button>
     </TooltipGroup>
   );

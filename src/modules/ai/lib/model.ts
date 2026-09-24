@@ -20,6 +20,53 @@ export const DEFAULT_EFFORT = "low";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
+export const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
+
+/**
+ * Modèles proposés dans les réglages.
+ *
+ * Une liste fermée plutôt qu'un champ libre : une faute de frappe dans un
+ * identifiant de modèle ne se voit qu'au moment de la génération, sous la
+ * forme d'une erreur d'API opaque. `ANTHROPIC_MODEL` reste disponible pour
+ * pointer un modèle absent de cette liste.
+ */
+export const MODEL_CHOICES = [
+  {
+    id: "claude-haiku-4-5-20251001",
+    label: "Haiku 4.5",
+    hint: "Le défaut. Quelques centimes par mois au volume cible.",
+  },
+  {
+    id: "claude-sonnet-5",
+    label: "Sonnet 5",
+    hint: "À essayer si les propositions restent plates une fois tes process rédigés.",
+  },
+  {
+    id: "claude-opus-5",
+    label: "Opus 5",
+    hint: "Le plus cher, et le moins justifié pour cinquante mots contraints.",
+  },
+] as const;
+
+export interface GenerationSettings {
+  model: string;
+  effort: Effort;
+}
+
+/** Filtre d'entrée : un réglage stocké ne doit pas pouvoir casser l'appel. */
+export function normalizeGenerationSettings(value: unknown): GenerationSettings {
+  const raw = (typeof value === "object" && value !== null ? value : {}) as Record<
+    string,
+    unknown
+  >;
+  const model =
+    typeof raw.model === "string" && raw.model.trim() !== "" ? raw.model.trim() : DEFAULT_MODEL;
+  const effort = EFFORTS.includes(raw.effort as Effort)
+    ? (raw.effort as Effort)
+    : (DEFAULT_EFFORT as Effort);
+  return { model, effort };
+}
+
 const EFFORT_CAPABLE_MODEL = /^claude-(opus|sonnet|fable)-5/;
 
 export function supportsEffort(model: string): boolean {

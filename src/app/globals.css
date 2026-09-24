@@ -141,6 +141,9 @@ html {
 }
 
 :root {
+  /* Largeur de la colonne de lecture (`max-w-2xl` de Tailwind). Déclarée ici
+     parce que des éléments fixes doivent s'y aligner sans être dedans. */
+  --nc-column-width: 42rem;
   --nc-radius-xs: 12px;
   --nc-radius-sm: 16px;
   --nc-radius-md: 24px;
@@ -303,12 +306,23 @@ html {
   border-color: var(--color-border-default);
 }
 .nc-btn--ghost:hover:not(:disabled) { background: var(--nc-nav-hover-bg); }
-/* Un filtre actif se distingue par la teinte de marque, pas par un contour de
-   plus : la barre en porte déjà trois. */
-.nc-btn--ghost[data-active="true"] {
+
+/* Variante « commande » : fond de surface plutôt que transparent. Les filtres
+   du feed reposent sur le fond de page, pas sur une carte ; transparents, ils
+   se lisaient comme du texte posé là plutôt que comme des boutons. */
+.nc-btn--surface {
+  background: var(--color-surface-card);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-default);
+}
+.nc-btn--surface:hover:not(:disabled) { border-color: var(--color-text-muted); }
+.dark .nc-btn--surface { border-color: rgba(255, 255, 255, 0.12); }
+
+/* Un filtre actif se distingue par la teinte de marque du texte et de la
+   bordure — le fond reste blanc, pour que la rangée garde une seule matière. */
+.nc-btn--surface[data-active="true"] {
   color: var(--color-brand);
-  border-color: rgba(224, 98, 90, 0.4);
-  background: rgba(224, 98, 90, 0.08);
+  border-color: rgba(224, 98, 90, 0.45);
 }
 .nc-btn--sm { height: 36px; padding: 0 14px; font-size: 14px; }
 
@@ -2016,11 +2030,15 @@ body.nc-kb-open .nc-nav-pill-bar {
 .nc-fade-out[data-shown="true"] { opacity: 1; }
 
 /* ── Retour en haut (desktop) ───────────────────────────────────────────── */
+/* Aligné sur la colonne de lecture, pas sur le bord de l'écran.
+   `left: 50%` + la demi-largeur de la colonne le posent juste à droite des
+   cartes : sur un écran large, un bouton collé au coin est à un demi-mètre du
+   texte qu'on vient de lire, donc hors de la zone où la main se trouve. */
 .nc-back-to-top {
   display: none;
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  left: calc(50% + (var(--nc-column-width) / 2) + 20px);
+  bottom: 32px;
   z-index: 40;
   width: 38px;
   height: 38px;

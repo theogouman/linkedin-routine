@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { Inbox, List, Newspaper, Send, SlidersHorizontal } from "lucide-react";
+import {
+  GearIcon,
+  InboxIcon,
+  ListIcon,
+  NewsIcon,
+  TimelineIcon,
+} from "./NotionIcons";
 import { activeNavRoute, NAV_ROUTES } from "./nav-routes";
 import { scrollAppToTop } from "@/shared/lib/scroll";
 
@@ -25,11 +31,11 @@ import { scrollAppToTop } from "@/shared/lib/scroll";
  */
 
 const TABS = [
-  { href: NAV_ROUTES[0], label: "Feed", icon: Newspaper, slot: "posts" as const },
-  { href: NAV_ROUTES[1], label: "Inbox", icon: Inbox, slot: "comments" as const },
-  { href: NAV_ROUTES[2], label: "File", icon: Send, slot: "queue" as const },
-  { href: NAV_ROUTES[3], label: "Listes", icon: List, slot: null },
-  { href: NAV_ROUTES[4], label: "Réglages", icon: SlidersHorizontal, slot: null },
+  { href: NAV_ROUTES[0], label: "Feed", icon: NewsIcon, slot: "posts" as const },
+  { href: NAV_ROUTES[1], label: "Inbox", icon: InboxIcon, slot: "comments" as const },
+  { href: NAV_ROUTES[2], label: "File", icon: TimelineIcon, slot: "queue" as const },
+  { href: NAV_ROUTES[3], label: "Listes", icon: ListIcon, slot: null },
+  { href: NAV_ROUTES[4], label: "Réglages", icon: GearIcon, slot: null },
 ];
 
 export interface NavBadgeSlots {
@@ -104,7 +110,11 @@ export function AppNav({ badges }: { badges: NavBadgeSlots }) {
               scrollAppToTop();
             }}
           >
-            <Icon size={19} strokeWidth={isActive ? 2.2 : 1.8} aria-hidden />
+            {/* L'épaisseur de trait ne varie plus avec l'état : les icônes
+                Notion sont dessinées à 1,5 et la graisser déforme les formes
+                pleines (l'engrenage, la coche). C'est la couleur et la pilule
+                qui disent l'onglet actif. */}
+            <Icon size={19} />
             <span>{tab.label}</span>
             {tab.slot ? badges[tab.slot] : null}
           </Link>

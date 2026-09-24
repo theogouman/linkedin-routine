@@ -34,6 +34,8 @@ import {
   restorePost,
 } from "@/server/engagement-service";
 import { enrichProfiles, synchronize } from "@/server/sync-service";
+import { saveGenerationSettings } from "@/modules/ai/server/generate";
+import type { Effort } from "@/modules/ai/lib/model";
 
 /**
  * Server Actions appelées par l'UI.
@@ -115,6 +117,26 @@ export async function fetchProfilePhotosAction(): Promise<
       more: outcome.more,
       message: outcome.message,
     };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Modèle et effort de génération.
+ *
+ * Stockés en base et non en variable d'environnement : c'est un réglage qu'on
+ * veut pouvoir bouger depuis le téléphone après avoir lu trois propositions
+ * fades, pas après un redéploiement.
+ */
+export async function saveGenerationSettingsAction(settings: {
+  model: string;
+  effort: Effort;
+}): Promise<ActionResult> {
+  try {
+    await saveGenerationSettings(settings);
+    revalidatePath("/reglages");
+    return { ok: true };
   } catch (error) {
     return fail(error);
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MODEL, supportsEffort } from "./model";
+import { DEFAULT_MODEL, normalizeGenerationSettings, supportsEffort } from "./model";
 
 describe("modèle de génération", () => {
   it("cible Haiku par défaut", () => {
@@ -23,5 +23,36 @@ describe("modèle de génération", () => {
     expect(supportsEffort("claude-haiku-4-5-20251001")).toBe(false);
     expect(supportsEffort("claude-3-5-sonnet-latest")).toBe(false);
     expect(supportsEffort("claude-sonnet-4-5")).toBe(false);
+  });
+});
+
+describe("réglage de génération stocké", () => {
+  it("retombe sur le défaut quand rien n'est stocké", () => {
+    expect(normalizeGenerationSettings(null)).toEqual({
+      model: DEFAULT_MODEL,
+      effort: "low",
+    });
+  });
+
+  it("refuse un effort inconnu plutôt que de le transmettre", () => {
+    // Un effort inventé serait rejeté par l'API au moment de la génération,
+    // c'est-à-dire devant l'utilisateur et sans indication de la cause.
+    expect(normalizeGenerationSettings({ model: "claude-sonnet-5", effort: "turbo" })).toEqual({
+      model: "claude-sonnet-5",
+      effort: "low",
+    });
+  });
+
+  it("accepte un modèle hors de la liste proposée", () => {
+    // La liste des réglages est fermée, mais `ANTHROPIC_MODEL` doit pouvoir
+    // pointer un modèle plus récent sans attendre un déploiement.
+    expect(normalizeGenerationSettings({ model: "claude-fable-5-1", effort: "high" })).toEqual({
+      model: "claude-fable-5-1",
+      effort: "high",
+    });
+  });
+
+  it("ignore une valeur vide", () => {
+    expect(normalizeGenerationSettings({ model: "   " }).model).toBe(DEFAULT_MODEL);
   });
 });

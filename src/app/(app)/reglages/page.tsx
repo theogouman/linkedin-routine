@@ -1,5 +1,5 @@
 import { loadPolicy } from "@/modules/engagement/server/settings";
-import { getProcessStatus } from "@/modules/ai/server/generate";
+import { getProcessStatus, loadGenerationSettings } from "@/modules/ai/server/generate";
 import { getSelfAccount } from "@/modules/lists/server/repository";
 import { getCursors, getRecentSyncRuns } from "@/modules/ingestion/server/cursors";
 import { countSubscriptions } from "@/modules/notifications/server/push";
@@ -20,9 +20,10 @@ export const metadata = { title: "Réglages — Routine" };
  * sous la ligne de flottaison.
  */
 export default async function SettingsPage() {
-  const [policy, processes, self, cursors, runs, pushCount] = await Promise.all([
+  const [policy, processes, generation, self, cursors, runs, pushCount] = await Promise.all([
     loadPolicy(),
     getProcessStatus(),
+    loadGenerationSettings(),
     getSelfAccount(),
     getCursors(),
     getRecentSyncRuns(5),
@@ -48,6 +49,7 @@ export default async function SettingsPage() {
         }}
         selfProfileUrl={self?.profile_url ?? null}
         processes={processes}
+        generation={generation}
         vapidPublicKey={readEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY") ?? null}
         pushSubscriptions={pushCount}
         syncRuns={runs.map((run) => ({

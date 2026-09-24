@@ -4,11 +4,16 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertCircle, Bell, Check, FileText, LogOut } from "lucide-react";
-import { savePolicyAction, setSelfProfileAction } from "@/app/actions";
+import {
+  saveGenerationSettingsAction,
+  savePolicyAction,
+  setSelfProfileAction,
+} from "@/app/actions";
+import { EFFORTS, MODEL_CHOICES, type Effort, type GenerationSettings } from "@/modules/ai/lib/model";
 import { logout } from "@/modules/auth/server/actions";
 import { formatMinuteOfDay, parseMinuteOfDay, relativeTime } from "@/shared/lib/format";
 import { Accordion } from "@/shared/motion/Accordion";
-import { Checkbox } from "@/shared/motion/Checkbox";
+import { Checkbox, CheckboxMark } from "@/shared/motion/Checkbox";
 import { ClearableInput } from "@/shared/motion/ClearableInput";
 import { IconSwap } from "@/shared/motion/IconSwap";
 import { SuccessCheck } from "@/shared/motion/SuccessCheck";
@@ -38,12 +43,20 @@ export interface PolicyView {
   timezone: string;
 }
 
-type Section = "compte" | "rythme" | "fenetre" | "process" | "notifications" | "diagnostics";
+type Section =
+  | "compte"
+  | "rythme"
+  | "fenetre"
+  | "modele"
+  | "process"
+  | "notifications"
+  | "diagnostics";
 
 export function SettingsForm({
   policy,
   selfProfileUrl,
   processes,
+  generation,
   vapidPublicKey,
   pushSubscriptions,
   syncRuns,
@@ -52,6 +65,7 @@ export function SettingsForm({
   policy: PolicyView;
   selfProfileUrl: string | null;
   processes: Array<{ kind: string; file: string; placeholder: boolean }>;
+  generation: GenerationSettings;
   vapidPublicKey: string | null;
   pushSubscriptions: number;
   syncRuns: Array<{
@@ -79,6 +93,9 @@ export function SettingsForm({
   const [end, setEnd] = useState(formatMinuteOfDay(policy.window.endMinute));
   const [profileUrl, setProfileUrl] = useState(selfProfileUrl ?? "");
   const [pushOn, setPushOn] = useState(pushSubscriptions > 0);
+  const [model, setModel] = useState(generation.model);
+  const [effort, setEffort] = useState<Effort>(generation.effort);
+  const [modelSaved, setModelSaved] = useState(false);
 
   const windowShake = useShake();
   const profileShake = useShake();
@@ -120,6 +137,19 @@ export function SettingsForm({
         return;
       }
       toast.success("Compte enregistré. Actualise pour récupérer tes publications.");
+      router.refresh();
+    });
+  };
+
+  const saveGeneration = () => {
+    startTransition(async () => {
+      const result = await saveGenerationSettingsAction({ model, effort });
+      if (!result.ok) {
+        toast.error(result.message ?? "Enregistrement impossible.");
+        return;
+      }
+      setModelSaved(true);
+      window.setTimeout(() => setModelSaved(false), 2200);
       router.refresh();
     });
   };
@@ -285,6 +315,92 @@ export function SettingsForm({
           ) : null}
 
           <SaveButton pending={pending} saved={saved} onClick={savePolicy} />
+        </div>
+      </Accordion>
+
+      <Accordion
+        className="nc-card nc-content-enter overflow-hidden"
+        open={open === "modele"}
+        onToggle={() => toggle("modele")}
+        title="Modèle de génération"
+        meta={`${MODEL_CHOICES.find((entry) => entry.id === model)?.label ?? model} · effort ${effort}`}
+      >
+        <div className="flex flex-col gap-3 px-4 pb-4">
+          <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+            Rédiger cinquante mots selon un process fourni est de la mise en forme
+            contrainte, pas du raisonnement : Haiku suffit, et coûte quelques centimes
+            par mois au volume cible.
+          </p>
+
+          <ul className="flex flex-col gap-1.5">
+            {MODEL_CHOICES.map((choice) => {
+              const active = model === choice.id;
+              return (
+                <li key={choice.id}>
+                  <button
+                    type="button"
+                    onClick={() => setModel(choice.id)}
+                    aria-pressed={active}
+                    className="flex w-full items-start gap-2.5 rounded-[12px] border p-3 text-left"
+                    style={{
+                      borderColor: active
+                        ? "rgba(224, 98, 90, 0.45)"
+                        : "var(--color-border-default)",
+                      background: active ? "rgba(224, 98, 90, 0.06)" : "transparent",
+                    }}
+                  >
+                    <CheckboxMark checked={active} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] font-medium">{choice.label}</span>
+                      <span
+                        className="mt-0.5 block text-[12px]"
+                        style={{ color: "var(--color-text-muted)" }}
+                      >
+                        {choice.hint}
+                      </span>
+                      <code className="mt-1 block text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+                        {choice.id}
+                      </code>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Le modèle courant peut venir d'`ANTHROPIC_MODEL` et sortir de la
+              liste : on le montre plutôt que de faire croire à un choix qui
+              n'est pas celui qui sert. */}
+          {MODEL_CHOICES.every((choice) => choice.id !== model) ? (
+            <p className="text-[12px]" style={{ color: "var(--color-brand)" }}>
+              Modèle hors liste, défini ailleurs : <code>{model}</code>. Choisir
+              ci-dessus le remplacera.
+            </p>
+          ) : null}
+
+          <div>
+            <p className="mb-1.5 text-[13px] font-semibold">Effort</p>
+            <p className="mb-2 text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+              Transmis uniquement aux modèles de la famille Claude 5. Sans effet sur
+              Haiku, qui ne connaît pas ce paramètre.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {EFFORTS.map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setEffort(level)}
+                  aria-pressed={effort === level}
+                  className="nc-btn nc-btn--surface nc-btn--sm"
+                  data-active={effort === level}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <SaveButton pending={pending} saved={modelSaved} onClick={saveGeneration} />
         </div>
       </Accordion>
 

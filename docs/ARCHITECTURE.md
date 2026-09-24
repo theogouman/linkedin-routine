@@ -107,7 +107,7 @@ la seconde ne touche aucune ligne.
 
 ## Tests
 
-255 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
+259 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
 
 | Sujet | Ce qui est vérifié |
 |---|---|
@@ -122,6 +122,7 @@ la seconde ne touche aucune ligne.
 | `nav-routes` | Aucun écran du groupe `(app)` n'est absent de la barre ; `/file` n'allume pas l'onglet `/fil` |
 | `reactions` | Le vocabulaire des six réactions est exactement celui de la contrainte SQL, et une valeur inconnue se dégrade en « J'aime » au lieu de lever |
 | `unipile` | La cause réelle d'un échec réseau atteint le journal, et un DSN collé sans schéma est complété plutôt que rejeté |
+| `model` (réglage) | Un effort inconnu stocké en base se dégrade au lieu d'être transmis à l'API |
 | `normalize` (engagement) | Le compteur affiché somme la ventilation par type, et vaut `null` — jamais `0` — quand le fournisseur se tait |
 
 Deux tests ont déjà attrapé un bug réel avant qu'il n'existe en production :
@@ -257,3 +258,18 @@ sinon un chiffre faux, et plus bas que la réalité.
 `null` et `0` sont distingués partout : LinkedIn masque ces compteurs sur
 certaines publications (`hideReactionsCount`), et afficher « 0 » sur un
 compteur masqué serait un mensonge.
+
+
+## Pourquoi le feed a une coquille cliente
+
+Changer de listes ne change pas de route, seulement des paramètres d'URL. Le
+routeur re-rend la page côté serveur et n'échange le DOM qu'une fois la charge
+utile complète reçue — et `startTransition` lui demande explicitement de garder
+l'écran précédent pendant ce temps. Résultat : une frontière `Suspense` posée
+dans la page ne joue qu'au premier chargement, et la sélection donnait une
+seconde d'écran figé.
+
+`FeedShell` est un composant client qui possède cette transition et rend le
+squelette lui-même tant que la navigation est en vol (82 ms mesurées jusqu'à
+l'apparition). La barre de filtres reste à l'écran : c'est elle qu'on vient de
+manipuler, la faire disparaître serait désorientant.

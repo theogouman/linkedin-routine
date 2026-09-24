@@ -309,17 +309,6 @@ export async function resumeQueue(at: Date, startFactor: number): Promise<void> 
 
 // ── Réglages ───────────────────────────────────────────────────────────────
 
-export async function readSetting<T>(key: string): Promise<T | null> {
-  const rows = unwrap(
-    await db().from("settings").select("value").eq("key", key).limit(1),
-    `lecture du réglage ${key}`,
-  ) as Array<{ value: T }>;
-  return rows[0]?.value ?? null;
-}
-
-export async function writeSetting(key: string, value: unknown): Promise<void> {
-  const { error } = await db()
-    .from("settings")
-    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
-  if (error) throw new Error(`Écriture du réglage ${key} : ${error.message}`);
-}
+// Les accesseurs de réglages vivent dans `@/shared/lib/settings` : la
+// génération en a besoin aussi, et un module n'importe pas un autre module.
+export { readSetting, writeSetting } from "@/shared/lib/settings";
