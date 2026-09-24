@@ -107,7 +107,7 @@ la seconde ne touche aucune ligne.
 
 ## Tests
 
-238 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
+245 tests, tous sans réseau ni base. Ils portent sur ce qui casse cher :
 
 | Sujet | Ce qui est vérifié |
 |---|---|
@@ -120,6 +120,8 @@ la seconde ne touche aucune ligne.
 | `profiles` | L'appariement d'un lot d'enrichissement se fait par identifiant, jamais par position |
 | `model` | Haiku par défaut, et `output_config` n'est transmis qu'aux modèles qui le connaissent |
 | `nav-routes` | Aucun écran du groupe `(app)` n'est absent de la barre ; `/file` n'allume pas l'onglet `/fil` |
+| `reactions` | Le vocabulaire des six réactions est exactement celui de la contrainte SQL, et une valeur inconnue se dégrade en « J'aime » au lieu de lever |
+| `normalize` (engagement) | Le compteur affiché somme la ventilation par type, et vaut `null` — jamais `0` — quand le fournisseur se tait |
 
 Deux tests ont déjà attrapé un bug réel avant qu'il n'existe en production :
 un 503 dont le corps contenait « service unavailable » était classé « profil
@@ -131,7 +133,7 @@ un `startsWith` nu faisait allumer l'onglet « Fil » sur l'écran « File ».
 
 | Route | Ce qu'on y répond |
 |---|---|
-| `/fil` | Qu'est-ce que mes créateurs ont publié, et que je n'ai pas encore traité |
+| `/fil` | Qu'est-ce que mes créateurs ont publié, et que je n'ai pas encore traité (« Feed » à l'écran) |
 | `/inbox` | Qui m'a répondu, et à qui je n'ai pas encore répondu |
 | `/file` | Qu'est-ce qui va partir, quand, et combien me reste-t-il aujourd'hui |
 | `/listes` | Qui je suis, et dans quel périmètre |
@@ -204,3 +206,39 @@ que cela veut dire concrètement :
 | Error shake | Une erreur là où on la corrige, plutôt qu'un toast à l'autre bout de l'écran |
 | Modal + dropdown | `window.prompt` et `window.confirm`, qui affichent le nom d'hôte en PWA installée |
 | Card tilt | Au pointeur fin uniquement, et coupé pendant la rédaction |
+
+
+## Les réactions
+
+Six réactions LinkedIn, pas seulement le pouce. Le vocabulaire vit à un seul
+endroit — `shared/lib/reactions.ts` — et il est répliqué en trois autres :
+
+1. une contrainte `check` en base (migration 007), pour qu'une valeur
+   impossible soit refusée à l'écriture et non à l'envoi ;
+2. `reaction_type` sur `write_actions`, relu au moment de la purge : l'action
+   part avec le type validé au clic, même deux heures plus tard ;
+3. `reaction_type` sur `posts` et `received_comments`, qui dit CE QUI a été
+   posé là où `liked_at` ne disait que QUAND.
+
+Un test compare la liste TypeScript à celle de la migration. Sans lui, ajouter
+une réaction dans l'interface et oublier la contrainte donnerait une erreur au
+moment de la mise en file — c'est-à-dire après la validation manuelle, quand
+l'utilisateur croit son geste enregistré.
+
+Le menu s'ouvre au survol sur pointeur fin et à l'appui long au doigt. Un
+`hover` n'existe pas sous un pouce, et s'arrêter là aurait réservé les six
+réactions au desktop — sur une app dont l'usage principal est le téléphone.
+
+## Les compteurs d'engagement
+
+`engagement.reactions[]` et `engagement.comments` sont **déjà** dans la charge
+utile de l'actor de publications : les afficher n'a coûté aucun appel
+supplémentaire, c'est la seule raison de le faire.
+
+Le total affiché est la somme de la ventilation par type, pas le champ `likes`
+qui ne compte que le pouce bleu — un post à quarante « bravo » afficherait
+sinon un chiffre faux, et plus bas que la réalité.
+
+`null` et `0` sont distingués partout : LinkedIn masque ces compteurs sur
+certaines publications (`hideReactionsCount`), et afficher « 0 » sur un
+compteur masqué serait un mensonge.

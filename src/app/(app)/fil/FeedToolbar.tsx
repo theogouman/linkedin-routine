@@ -1,82 +1,74 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useLayoutEffect, useRef, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 import { refreshNow } from "@/app/actions";
+import { Dropdown } from "@/shared/motion/Dropdown";
 import { MatrixLoader } from "@/shared/motion/MatrixLoader";
+import { ScaleDownFade } from "@/shared/motion/ScaleDownFade";
 import { TooltipGroup } from "@/shared/motion/Tooltip";
+import { ListPickerMenu } from "@/shared/components/ListPickerMenu";
+import {
+  CheckmarkIcon,
+  ClockAlternateIcon,
+  ReorderIcon,
+} from "@/shared/components/NotionIcons";
+import { scrollAppToTop } from "@/shared/lib/scroll";
 
 /**
- * Filtre par liste + actualisation manuelle (FR-003, FR-004).
+ * Filtres du feed (FR-003, FR-004).
  *
- * Le segment glissant vient de transitions.dev (`t-tabs`), thémé avec les
- * tokens Notion Club. La pilule est positionnée en JS à partir des dimensions
- * mesurées : c'est ce qui la fait glisser au lieu de sauter.
+ * Le segment glissant a disparu : avec huit listes il défilait en long, et la
+ * liste cherchée était toujours hors écran. Un menu à cases à cocher tient sur
+ * un bouton, montre tout d'un coup et permet la sélection multiple, ce que le
+ * segment ne permettait pas du tout.
+ *
+ * Le second filtre bascule entre « à commenter » et « déjà commenté ». Ce ne
+ * sont pas deux réglages mais deux moments — vider la file, ou relire ce qu'on
+ * a fait — donc un basculement et non une case de plus.
  */
 export function FeedToolbar({
   lists,
-  activeListId,
-  showAll,
+  selectedListIds,
+  scope,
   lastSyncLabel,
 }: {
   lists: Array<{ id: string; name: string; count: number }>;
-  activeListId: string | null;
-  showAll: boolean;
+  selectedListIds: string[];
+  scope: "unprocessed" | "processed";
   lastSyncLabel: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  const barRef = useRef<HTMLDivElement | null>(null);
-  const pillRef = useRef<HTMLSpanElement | null>(null);
-  const firstRender = useRef(true);
-
-  const tabs = [{ id: null, name: "Toutes" }, ...lists.map((l) => ({ id: l.id, name: l.name }))];
-  const activeIndex = Math.max(
-    0,
-    tabs.findIndex((tab) => tab.id === activeListId),
-  );
-
-  useLayoutEffect(() => {
-    const bar = barRef.current;
-    const pill = pillRef.current;
-    if (!bar || !pill) return;
-    const target = bar.querySelectorAll<HTMLElement>("[role='tab']")[activeIndex];
-    if (!target) return;
-
-    const apply = () => {
-      pill.style.width = `${target.offsetWidth}px`;
-      pill.style.transform = `translateX(${target.offsetLeft - 3}px)`;
-    };
-
-    if (firstRender.current) {
-      const saved = pill.style.transition;
-      pill.style.transition = "none";
-      apply();
-      void pill.offsetWidth;
-      pill.style.transition = saved;
-      firstRender.current = false;
-    } else {
-      apply();
-    }
-    target.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeIndex, lists.length]);
-
-  const select = (listId: string | null) => {
+  const push = (mutate: (next: URLSearchParams) => void) => {
     const next = new URLSearchParams(params.toString());
-    if (listId) next.set("liste", listId);
-    else next.delete("liste");
-    router.push(`/fil?${next.toString()}`);
+    mutate(next);
+    const query = next.toString();
+    router.push(query === "" ? "/fil" : `/fil?${query}`);
+    // Changer de filtre change la file : rester au milieu de l'ancienne
+    // n'aurait pas de sens, les éléments sous les yeux ne sont plus les mêmes.
+    scrollAppToTop();
+  };
+
+  const toggleList = (id: string, next: boolean) => {
+    push((query) => {
+      const current = new Set(selectedListIds);
+      if (next) current.add(id);
+      else current.delete(id);
+      if (current.size === 0) query.delete("liste");
+      else query.set("liste", [...current].join(","));
+    });
   };
 
   const toggleScope = () => {
-    const next = new URLSearchParams(params.toString());
-    if (showAll) next.delete("tout");
-    else next.set("tout", "1");
-    router.push(`/fil?${next.toString()}`);
+    push((query) => {
+      if (scope === "unprocessed") query.set("vue", "traite");
+      else query.delete("vue");
+    });
   };
 
   const refresh = () => {
@@ -95,36 +87,82 @@ export function FeedToolbar({
     });
   };
 
+  const count = selectedListIds.length;
+  const listLabel = count === 0 ? "Listes" : `${count} liste${count > 1 ? "s" : ""}`;
+
   return (
     <TooltipGroup className="nc-tt-row mb-1 items-center gap-2">
-      <div ref={barRef} className="nc-scroll-x t-tabs min-w-0 flex-1" role="tablist">
-        <span ref={pillRef} className="t-tabs-pill" aria-hidden />
-        {tabs.map((tab) => (
+      <Dropdown
+        label="Filtrer par liste"
+        origin="top-left"
+        align="left"
+        trigger={({ toggle, open }) => (
           <button
-            key={tab.id ?? "all"}
             type="button"
-            role="tab"
-            aria-selected={tab.id === activeListId}
-            className="t-tab text-[13px] font-medium"
-            onClick={() => select(tab.id)}
+            onClick={toggle}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            className="nc-btn nc-btn--ghost nc-btn--sm shrink-0"
+            data-active={count > 0}
           >
-            {tab.name}
+            <ReorderIcon />
+            {listLabel}
+            <ChevronDown
+              size={14}
+              aria-hidden
+              className="transition-transform"
+              style={{ transform: open ? "rotate(180deg)" : undefined }}
+            />
           </button>
-        ))}
-      </div>
+        )}
+      >
+        {() => (
+          <ListPickerMenu
+            lists={lists}
+            selected={selectedListIds}
+            onToggle={toggleList}
+            footer={
+              count > 0 ? (
+                <button
+                  type="button"
+                  className="nc-menu-item w-full"
+                  onClick={() => push((query) => query.delete("liste"))}
+                >
+                  Toutes les listes
+                </button>
+              ) : null
+            }
+          />
+        )}
+      </Dropdown>
 
+      {/* animate-text · scale-down-fade — le libellé ET son icône basculent
+          ensemble : ce sont deux façons de dire la même chose, les séparer
+          ferait clignoter l'un pendant que l'autre glisse. */}
       <button
         type="button"
         onClick={toggleScope}
         className="nc-btn nc-btn--ghost nc-btn--sm shrink-0"
-        data-tooltip={showAll ? "N'afficher que les non traitées" : "Afficher aussi les traitées"}
+        data-active={scope === "processed"}
+        aria-pressed={scope === "processed"}
       >
-        {showAll ? "À traiter" : "Tout"}
+        <ScaleDownFade swapKey={scope}>
+          {scope === "processed" ? (
+            <>
+              <CheckmarkIcon />
+              Déjà commenté
+            </>
+          ) : (
+            <>
+              <ClockAlternateIcon />
+              À commenter
+            </>
+          )}
+        </ScaleDownFade>
       </button>
 
-      {/* transitions.dev · 31 — le loader matriciel remplace le spinner
-          pendant l'actualisation : il tient dans le bouton sans en changer la
-          taille, donc la barre ne bouge pas. */}
+      <div className="flex-1" />
+
       <button
         type="button"
         onClick={refresh}
@@ -133,11 +171,7 @@ export function FeedToolbar({
         data-tooltip={`Dernière actualisation : ${lastSyncLabel}`}
         aria-label="Actualiser"
       >
-        {pending ? (
-          <MatrixLoader variant="orbit" />
-        ) : (
-          <RefreshCw size={16} aria-hidden />
-        )}
+        {pending ? <MatrixLoader variant="orbit" /> : <RefreshCw size={16} aria-hidden />}
       </button>
     </TooltipGroup>
   );

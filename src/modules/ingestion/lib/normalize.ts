@@ -149,6 +149,7 @@ export function normalizePost(input: unknown): FetchedPost | null {
   const author = asRecord(raw.author) ?? {};
   const avatar = asRecord(author.avatar);
   const social = asRecord(raw.socialContent);
+  const counts = extractEngagement(raw);
   const { media, kind } = extractMedia(raw);
   const publicIdentifier = asString(author.publicIdentifier);
 
@@ -163,6 +164,8 @@ export function normalizePost(input: unknown): FetchedPost | null {
     mediaKind: kind,
     isRepost: isRepost(raw),
     publishedAt,
+    reactionCount: counts.reactions,
+    commentCount: counts.comments,
     author: {
       name: asString(author.name),
       profileUrl: asString(author.linkedinUrl) ?? buildProfileUrl(publicIdentifier),
@@ -170,6 +173,40 @@ export function normalizePost(input: unknown): FetchedPost | null {
       avatarUrl: avatar ? asString(avatar.url) : null,
     },
   };
+}
+
+/**
+ * Compteurs d'engagement.
+ *
+ * L'actor les rend DÉJÀ dans la charge utile (`engagement.reactions[]`,
+ * `engagement.comments`) : les lire ne coûte pas un crédit de plus. C'est la
+ * seule raison de les afficher — aucun appel supplémentaire n'a été ajouté
+ * pour eux.
+ *
+ * `null` plutôt que `0` quand le champ manque : « aucune réaction » et « le
+ * fournisseur ne l'a pas dit » ne sont pas la même chose, et LinkedIn masque
+ * ces compteurs sur certaines publications (`hideReactionsCount`).
+ */
+function extractEngagement(raw: Json): {
+  reactions: number | null;
+  comments: number | null;
+} {
+  const engagement = asRecord(raw.engagement);
+  if (!engagement) return { reactions: null, comments: null };
+
+  // `reactions` est une ventilation par type ; sa somme est le total réel,
+  // alors que `likes` ne compte que le pouce bleu.
+  const breakdown = asArray(engagement.reactions).reduce<number | null>((total, entry) => {
+    const item = asRecord(entry);
+    const count = item && typeof item.count === "number" ? item.count : null;
+    if (count === null) return total;
+    return (total ?? 0) + count;
+  }, null);
+
+  const likes = typeof engagement.likes === "number" ? engagement.likes : null;
+  const comments = typeof engagement.comments === "number" ? engagement.comments : null;
+
+  return { reactions: breakdown ?? likes, comments };
 }
 
 /**

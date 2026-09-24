@@ -303,6 +303,13 @@ html {
   border-color: var(--color-border-default);
 }
 .nc-btn--ghost:hover:not(:disabled) { background: var(--nc-nav-hover-bg); }
+/* Un filtre actif se distingue par la teinte de marque, pas par un contour de
+   plus : la barre en porte déjà trois. */
+.nc-btn--ghost[data-active="true"] {
+  color: var(--color-brand);
+  border-color: rgba(224, 98, 90, 0.4);
+  background: rgba(224, 98, 90, 0.08);
+}
 .nc-btn--sm { height: 36px; padding: 0 14px; font-size: 14px; }
 
 .nc-icon-btn {
@@ -1944,6 +1951,167 @@ body.nc-kb-open .nc-bottom-nav {
    snippet quel que soit l'ordre — d'où cette classe, non couchée elle aussi. */
 .t-tt-group.nc-tt-block { display: block; width: 100%; }
 .t-tt-group.nc-tt-row { display: flex; width: 100%; }
+
+/* ── Barre de réactions (morphose transitions.dev · 20) ─────────────────── */
+/* Le snippet fixe un bouton de 40 px ; le nôtre en fait 38, comme les autres
+   boutons ronds de la barre d'actions. Le reste de la morphose est intact. */
+.nc-reaction-morph {
+  width: 38px;
+  height: 38px;
+  transition:
+    width var(--morph-close-dur) var(--morph-close-ease),
+    height var(--morph-close-dur) var(--morph-close-ease),
+    border-radius var(--morph-close-dur) var(--morph-close-ease),
+    background var(--morph-fade-dur) var(--morph-close-ease),
+    box-shadow var(--morph-fade-dur) var(--morph-close-ease),
+    border-color var(--morph-fade-dur) var(--morph-close-ease);
+}
+.nc-reaction-morph .t-morph-plus {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-card);
+}
+.dark .nc-reaction-morph .t-morph-plus { border-color: rgba(255, 255, 255, 0.12); }
+.nc-reaction-morph[data-open="true"] .t-morph-plus { border-color: transparent; }
+
+/* Chaque pastille se soulève à son survol : même grammaire que la pile
+   d'avatars, appliquée là où l'on choisit plutôt que là où l'on regarde. */
+.nc-reaction-choice {
+  display: inline-flex;
+  transform: translateY(0) scale(1);
+  transition: transform var(--avatar-dur) var(--avatar-ease-in);
+  cursor: pointer;
+}
+.nc-reaction-choice:hover:not(:disabled) {
+  transform: translateY(-4px) scale(1.12);
+  transition-timing-function: var(--avatar-ease-out);
+}
+.nc-reaction-choice:disabled { opacity: 0.5; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .nc-reaction-choice { transition: none !important; transform: none !important; }
+}
+
+/* ── Bandeau d'annulation ───────────────────────────────────────────────── */
+/* Ancré au-dessus de la barre de navigation sur mobile, en bas de la colonne
+   de lecture sur desktop : il doit rester visible sans jamais recouvrir le
+   bouton qui vient de servir. */
+.nc-undo-slot {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  z-index: 45;
+  width: min(100% - 32px, 460px);
+  pointer-events: none;
+}
+@media (min-width: 48rem) {
+  .nc-undo-slot { bottom: 24px; }
+}
+.nc-undo-slot > * { pointer-events: auto; }
+
+.nc-undo-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  border-radius: 9999px;
+  background: var(--nc-btn-dark-bg);
+  color: var(--nc-btn-dark-text);
+  box-shadow: var(--nc-shadow-3);
+  font-size: 13px;
+  font-weight: 500;
+}
+.nc-undo-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background: rgba(127, 127, 127, 0.25);
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-quick) ease;
+}
+.nc-undo-action:hover { background: rgba(127, 127, 127, 0.4); }
+
+/* Image agrandissable : le curseur et un léger retrait au clic disent qu'il
+   se passe quelque chose, sans ajouter de chrome par-dessus la photo. */
+.nc-zoomable {
+  display: block;
+  width: 100%;
+  cursor: zoom-in;
+  transition: transform var(--duration-quick) var(--ease-smooth-out);
+}
+.nc-zoomable:active { transform: scale(0.985); }
+@media (prefers-reduced-motion: reduce) {
+  .nc-zoomable { transition: none; transform: none !important; }
+}
+
+/* Dégradé de coupe du « Voir plus ». La couleur vient de la carte, pas d'un
+   blanc en dur : en thème sombre un fondu vers le blanc serait une barre. */
+.nc-fade-out {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 44px;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    var(--color-surface-card) 88%
+  );
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+}
+.nc-fade-out[data-shown="true"] { opacity: 1; }
+
+/* ── Retour en haut (desktop) ───────────────────────────────────────────── */
+.nc-back-to-top {
+  display: none;
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-default);
+  background: var(--nc-glass-bg);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  color: var(--color-text-secondary);
+  box-shadow: var(--nc-shadow-2);
+  cursor: pointer;
+  /* Discret : il n'existe qu'une fois loin du haut, et il s'efface au repos. */
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-smooth-out),
+    transform var(--duration-fast) var(--ease-smooth-out),
+    color var(--duration-quick) ease;
+}
+@media (min-width: 48rem) {
+  .nc-back-to-top { display: inline-flex; }
+}
+.nc-back-to-top[data-shown="true"] {
+  opacity: 0.72;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+.nc-back-to-top[data-shown="true"]:hover {
+  opacity: 1;
+  color: var(--color-text-primary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-back-to-top { transition: opacity var(--duration-quick) ease; transform: none; }
+}
 
 /* ── Divers ─────────────────────────────────────────────────────────────── */
 .nc-scroll-x {

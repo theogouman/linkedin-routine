@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { after } from "next/server";
 import { AppNav } from "@/shared/components/AppNav";
+import { BackToTop } from "@/shared/components/BackToTop";
 import { NavBadge } from "@/shared/components/NavBadge";
 import { countUnprocessedPosts } from "@/modules/feed/server/repository";
 import { countUnprocessedComments } from "@/modules/inbox/server/repository";
@@ -61,6 +62,7 @@ export default function AppLayout({
       <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-[calc(112px+env(safe-area-inset-bottom,0px))] md:pb-16">
         {children}
       </div>
+      <BackToTop />
     </div>
   );
 }

@@ -254,3 +254,43 @@ describe("selectNewComments", () => {
     expect(selected.map((c) => c.providerCommentId)).toEqual(["c1", "c2"]);
   });
 });
+
+describe("compteurs d'engagement", () => {
+  const base = {
+    id: "urn:li:activity:9",
+    content: "texte",
+    postedAt: { timestamp: Date.parse("2026-03-17T09:00:00Z") },
+    author: { name: "Alice", linkedinUrl: "https://www.linkedin.com/in/alice" },
+  };
+
+  it("somme la ventilation par type plutôt que de ne compter que les pouces", () => {
+    // `likes` ne compte que le pouce bleu ; afficher ce nombre sous une
+    // publication à 40 « bravo » donnerait un chiffre faux et plus bas.
+    const post = normalizePost({
+      ...base,
+      engagement: {
+        likes: 10,
+        comments: 4,
+        reactions: [
+          { type: "LIKE", count: 10 },
+          { type: "PRAISE", count: 40 },
+          { type: "EMPATHY", count: 2 },
+        ],
+      },
+    });
+    expect(post?.reactionCount).toBe(52);
+    expect(post?.commentCount).toBe(4);
+  });
+
+  it("retombe sur `likes` quand la ventilation manque", () => {
+    const post = normalizePost({ ...base, engagement: { likes: 7, comments: 1 } });
+    expect(post?.reactionCount).toBe(7);
+  });
+
+  it("rend null quand le fournisseur ne dit rien, jamais 0", () => {
+    // « Aucune réaction » et « compteur masqué par LinkedIn » ne sont pas la
+    // même chose ; afficher « 0 » sur le second serait un mensonge.
+    expect(normalizePost(base)?.reactionCount).toBeNull();
+    expect(normalizePost({ ...base, engagement: {} })?.commentCount).toBeNull();
+  });
+});

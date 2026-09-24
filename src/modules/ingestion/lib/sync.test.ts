@@ -30,6 +30,8 @@ function post(id: string, iso = "2026-03-17T09:00:00Z"): FetchedPost {
     mediaKind: "none",
     isRepost: false,
     publishedAt: new Date(iso),
+    reactionCount: null,
+    commentCount: null,
     author: {
       name: "Alice", profileUrl: "https://www.linkedin.com/in/alice",
       publicIdentifier: "alice", avatarUrl: "https://a.jpg",

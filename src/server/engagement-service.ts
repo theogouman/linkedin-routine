@@ -1,6 +1,11 @@
 import "server-only";
 
-import { getPost, markPostProcessed, unmarkPostProcessed } from "@/modules/feed/server/repository";
+import {
+  getPost,
+  markPostProcessed,
+  unmarkPostProcessed,
+} from "@/modules/feed/server/repository";
+import { DEFAULT_REACTION, type ReactionType } from "@/shared/lib/reactions";
 import { getComment, markCommentProcessed } from "@/modules/inbox/server/repository";
 import { enqueueWriteAction, type EnqueueResult } from "@/modules/engagement/server/queue";
 import { generateComment, type GenerationResult } from "@/modules/ai/server/generate";
@@ -59,10 +64,21 @@ export async function replyToComment(input: {
   });
 }
 
-export async function likePost(postId: string): Promise<EnqueueResult> {
+/**
+ * Pose une réaction sur une publication (FR-013, étendu aux six réactions).
+ *
+ * Une réaction déjà posée n'est pas remplaçable : LinkedIn accepte le
+ * changement, mais chaque modification est une action de plus sur le compte,
+ * et le plafond protège précisément contre ce volume. Changer d'avis coûte
+ * donc un passage par LinkedIn, comme avant.
+ */
+export async function likePost(
+  postId: string,
+  reactionType: ReactionType = DEFAULT_REACTION,
+): Promise<EnqueueResult> {
   const post = await getPost(postId);
   if (!post) throw new Error("Publication introuvable.");
-  if (post.liked_at) throw new Error("Cette publication est déjà likée.");
+  if (post.liked_at) throw new Error("Cette publication porte déjà une réaction.");
 
   return enqueueWriteAction({
     kind: "like",
@@ -71,13 +87,17 @@ export async function likePost(postId: string): Promise<EnqueueResult> {
     targetCommentId: null,
     body: null,
     origin: "manual",
+    reactionType,
   });
 }
 
-export async function likeComment(commentId: string): Promise<EnqueueResult> {
+export async function likeComment(
+  commentId: string,
+  reactionType: ReactionType = DEFAULT_REACTION,
+): Promise<EnqueueResult> {
   const comment = await getComment(commentId);
   if (!comment) throw new Error("Commentaire introuvable.");
-  if (comment.liked_at) throw new Error("Ce commentaire est déjà liké.");
+  if (comment.liked_at) throw new Error("Ce commentaire porte déjà une réaction.");
 
   return enqueueWriteAction({
     kind: "like",
@@ -86,6 +106,7 @@ export async function likeComment(commentId: string): Promise<EnqueueResult> {
     targetCommentId: comment.id,
     body: null,
     origin: "manual",
+    reactionType,
   });
 }
 

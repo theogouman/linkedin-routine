@@ -5,49 +5,54 @@ import { getLastSuccessfulSync } from "@/modules/ingestion/server/cursors";
 import { getQueueState } from "@/modules/engagement/server/repository";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { PageHeader } from "@/shared/components/PageHeader";
-import { PostCard } from "./PostCard";
+import { FeedList } from "./FeedList";
 import { FeedToolbar } from "./FeedToolbar";
 import { SuspendedBanner } from "@/shared/components/SuspendedBanner";
 import { relativeTime } from "@/shared/lib/format";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Fil — Routine" };
+export const metadata = { title: "Feed — Routine" };
 
 /**
- * Le fil (US-2, FR-004).
+ * Le feed (US-2, FR-004).
  *
- * Antichronologique strict, filtrable par liste, sans aucun contenu
- * algorithmique. Par défaut il ne montre que les publications non traitées :
+ * Antichronologique strict, filtrable par listes, sans aucun contenu
+ * algorithmique. Par défaut il ne montre que les publications à commenter :
  * c'est une file à vider, pas un flux à parcourir.
  */
 export default async function FeedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ liste?: string; tout?: string }>;
+  searchParams: Promise<{ liste?: string; vue?: string }>;
 }) {
   const params = await searchParams;
-  const listId = params.liste;
-  const showAll = params.tout === "1";
+  const selectedListIds = (params.liste ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id !== "");
+  const scope = params.vue === "traite" ? "processed" : "unprocessed";
 
   const [posts, lists, lastSync, queueState] = await Promise.all([
-    getFeed({ listId, scope: showAll ? "all" : "unprocessed", limit: 60 }),
+    getFeed({ listIds: selectedListIds, scope, limit: 60 }),
     getLists(),
     getLastSuccessfulSync(),
     getQueueState(),
   ]);
 
-  const remaining = posts.filter((post) => post.processed_at === null).length;
+  // La pastille de liste n'a de sens que si le feed en mélange plusieurs :
+  // sur une vue filtrée sur une seule liste, elle répéterait le filtre.
+  const showListBadges = selectedListIds.length !== 1;
 
   return (
     <>
       <PageHeader
-        title="Fil"
+        title="Feed"
         subtitle={
-          showAll
-            ? `${posts.length} publication${posts.length > 1 ? "s" : ""} affichée${posts.length > 1 ? "s" : ""}`
-            : remaining === 0
+          scope === "processed"
+            ? `${posts.length} publication${posts.length > 1 ? "s" : ""} déjà traitée${posts.length > 1 ? "s" : ""}`
+            : posts.length === 0
               ? "File vide"
-              : `${remaining} à traiter`
+              : `${posts.length} à traiter`
         }
       />
 
@@ -59,52 +64,39 @@ export default async function FeedPage({
 
       <FeedToolbar
         lists={lists.map((list) => ({ id: list.id, name: list.name, count: list.accountCount }))}
-        activeListId={listId ?? null}
-        showAll={showAll}
-        lastSyncLabel={
-          lastSync?.finished_at ? relativeTime(lastSync.finished_at) : "jamais"
-        }
+        selectedListIds={selectedListIds}
+        scope={scope}
+        lastSyncLabel={lastSync?.finished_at ? relativeTime(lastSync.finished_at) : "jamais"}
       />
 
       {posts.length === 0 ? (
         lists.length === 0 ? (
           <EmptyState
             title="Aucune liste"
-            description="Crée une liste et colle les URLs des profils que tu veux suivre. Le fil ne montrera qu'eux."
+            description="Crée une liste et colle les URLs des profils que tu veux suivre. Le feed ne montrera qu'eux."
             action={
               <Link href="/listes" className="nc-btn nc-btn--primary nc-btn--sm">
                 Créer une liste
               </Link>
             }
           />
-        ) : showAll ? (
+        ) : scope === "processed" ? (
           <EmptyState
-            title="Rien à afficher"
-            description="Aucune publication récupérée pour ce filtre. Actualise, ou vérifie que tes comptes publient."
+            title="Rien de traité"
+            description="Aucune publication commentée ou ignorée pour ce filtre."
           />
         ) : (
           <EmptyState
             title="File vide"
             description="Toutes les publications sont traitées. C'est le but — reviens à la prochaine actualisation."
-            action={
-              <Link href="/fil?tout=1" className="nc-btn nc-btn--ghost nc-btn--sm">
-                Revoir les publications traitées
-              </Link>
-            }
           />
         )
       ) : (
-        <ul className="mt-4 flex flex-col gap-3">
-          {posts.map((post, index) => (
-            <li
-              key={post.id}
-              className="nc-content-enter"
-              style={{ "--nc-enter-i": Math.min(index, 6) } as React.CSSProperties}
-            >
-              <PostCard post={post} />
-            </li>
-          ))}
-        </ul>
+        <FeedList
+          posts={posts}
+          lists={lists.map((list) => ({ id: list.id, name: list.name }))}
+          showListBadges={showListBadges}
+        />
       )}
     </>
   );

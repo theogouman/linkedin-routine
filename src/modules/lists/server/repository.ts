@@ -202,6 +202,66 @@ export async function removeAccountFromList(
  * Les profils restreints sont exclus : les réinterroger coûterait à chaque
  * passe pour un résultat connu d'avance.
  */
+/**
+ * Rattachements d'un compte, pour pouvoir les remettre en place.
+ *
+ * C'est ce que l'annulation relit : sans lui, « Supprimer le créateur » serait
+ * irréversible, et un bandeau d'annulation qui ne peut rien annuler est pire
+ * que pas de bandeau du tout.
+ */
+export async function getAccountListIds(accountId: string): Promise<string[]> {
+  const rows = unwrap(
+    await db().from("list_accounts").select("list_id").eq("account_id", accountId),
+    "lecture des listes d'un compte",
+  ) as Array<{ list_id: string }>;
+  return rows.map((row) => row.list_id);
+}
+
+/**
+ * Remplace l'appartenance d'un compte par l'ensemble donné.
+ *
+ * Un ensemble vide retire le compte de partout — c'est ce que fait
+ * « Supprimer le créateur ». Le compte lui-même n'est PAS supprimé : ses
+ * publications déjà récupérées gardent un auteur, et le journal des
+ * commentaires envoyés garde une cible. Le sortir des listes suffit à le faire
+ * disparaître du fil, qui est ce qui était demandé.
+ */
+export async function setAccountLists(
+  accountId: string,
+  listIds: string[],
+): Promise<void> {
+  const wanted = [...new Set(listIds.filter((id) => id !== ""))];
+
+  const { error: deleteError } = await db()
+    .from("list_accounts")
+    .delete()
+    .eq("account_id", accountId);
+  if (deleteError) {
+    throw new Error(`Retrait des rattachements : ${deleteError.message}`);
+  }
+
+  if (wanted.length === 0) return;
+
+  const { error: insertError } = await db()
+    .from("list_accounts")
+    .upsert(
+      wanted.map((listId) => ({ list_id: listId, account_id: accountId })),
+      { onConflict: "list_id,account_id", ignoreDuplicates: true },
+    );
+  if (insertError) {
+    throw new Error(`Rattachement du compte : ${insertError.message}`);
+  }
+}
+
+/** Compte porteur d'une publication, pour les actions de la carte du fil. */
+export async function getAccount(accountId: string): Promise<AccountRow | null> {
+  const rows = unwrap(
+    await db().from("accounts").select("*").eq("id", accountId).limit(1),
+    "lecture d'un compte",
+  ) as AccountRow[];
+  return rows[0] ?? null;
+}
+
 export async function getAccountsMissingProfile(limit: number): Promise<AccountRow[]> {
   return unwrap(
     await db()

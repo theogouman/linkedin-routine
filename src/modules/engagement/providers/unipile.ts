@@ -13,6 +13,7 @@
  */
 
 import { readEnv, requireEnv } from "@/shared/lib/env";
+import { DEFAULT_REACTION } from "@/shared/lib/reactions";
 import {
   WriteProviderError,
   type PublishCommentInput,
@@ -170,7 +171,7 @@ export class UnipileWriteProvider implements WriteProvider {
       ...(input.targetType === "comment" && input.providerCommentId
         ? { comment_id: input.providerCommentId }
         : {}),
-      reaction_type: "like",
+      reaction_type: input.reactionType ?? DEFAULT_REACTION,
     });
     return toResult(raw);
   }

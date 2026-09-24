@@ -9,7 +9,7 @@ import { Avatar } from "@/shared/components/Avatar";
 import { Composer } from "@/shared/components/Composer";
 import { InlineToast } from "@/shared/motion/InlineToast";
 import { LearnMoreLink } from "@/shared/motion/LearnMoreLink";
-import { LikeButton } from "@/shared/motion/LikeButton";
+import { ReactionPicker } from "@/shared/motion/ReactionPicker";
 import { PanelReveal } from "@/shared/motion/PanelReveal";
 import { SuccessCheck } from "@/shared/motion/SuccessCheck";
 import { TooltipGroup } from "@/shared/motion/Tooltip";
@@ -20,6 +20,11 @@ import {
   submitReply,
 } from "@/app/actions";
 import { relativeTime, scheduledLabel } from "@/shared/lib/format";
+import {
+  asReactionType,
+  reaction as lookupReaction,
+  type ReactionType,
+} from "@/shared/lib/reactions";
 
 /**
  * Un commentaire reçu (FR-008, FR-009, FR-013).
@@ -119,11 +124,16 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
       ) : null}
 
       <div className="mt-3 flex items-center gap-2 border-t px-4 py-3" style={{ borderColor: "var(--color-border-default)" }}>
-        <LikeButton
-          liked={comment.liked_at !== null}
+        <ReactionPicker
+          current={comment.liked_at !== null ? asReactionType(comment.reaction_type) : null}
           disabled={pending || comment.liked_at !== null}
-          onLike={() => run(() => likeCommentAction(comment.id), "Like en file")}
-          label={comment.liked_at ? "Déjà liké" : "Liker ce commentaire"}
+          label={comment.liked_at ? "Réaction déjà posée" : "Réagir à ce commentaire"}
+          onPick={(type: ReactionType) =>
+            run(
+              () => likeCommentAction(comment.id, type),
+              `${lookupReaction(type).label} en file`,
+            )
+          }
         />
 
         <button

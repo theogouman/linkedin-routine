@@ -33,6 +33,12 @@ export interface FetchedPost {
   mediaKind: MediaKind;
   isRepost: boolean;
   publishedAt: Date;
+  /**
+   * Compteurs lus dans la charge utile du fournisseur, `null` quand il ne les
+   * donne pas. Aucun appel supplémentaire n'est fait pour les obtenir.
+   */
+  reactionCount: number | null;
+  commentCount: number | null;
   author: {
     name: string | null;
     profileUrl: string | null;

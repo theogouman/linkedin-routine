@@ -1,5 +1,10 @@
 import "server-only";
 
+import {
+  asReactionType,
+  DEFAULT_REACTION,
+  type ReactionType,
+} from "@/shared/lib/reactions";
 import type { WriteActionRow } from "@/shared/lib/rows";
 import {
   canSend,
@@ -63,6 +68,8 @@ export interface EnqueueRequest {
   body: string | null;
   media?: unknown;
   origin: "manual" | "ai_edited" | "ai_unchanged";
+  /** Réaction à poser quand `kind` vaut `like`. Ignoré sinon. */
+  reactionType?: ReactionType;
 }
 
 export interface EnqueueResult extends NextSlotResult {
@@ -109,6 +116,7 @@ export async function enqueueWriteAction(
     body: request.body,
     media: request.media ?? null,
     origin: request.origin,
+    reactionType: request.reactionType ?? DEFAULT_REACTION,
     scheduledFor: slot.scheduledFor,
   });
 
@@ -202,6 +210,9 @@ export async function drainQueue(
               targetType: action.target_type,
               providerPostId: target.providerPostId,
               providerCommentId: target.providerCommentId,
+              // Relu depuis la ligne, jamais recalculé : l'action part avec le
+              // type validé au clic, même deux heures plus tard.
+              reactionType: asReactionType(action.reaction_type),
             })
           : action.kind === "reply"
             ? await provider.publishReply({

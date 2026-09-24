@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, unwrap } from "@/shared/lib/db";
+import type { ReactionType } from "@/shared/lib/reactions";
 import type {
   QueueStateRow,
   WriteActionRow,
@@ -21,6 +22,7 @@ export interface EnqueueInput {
   media: unknown;
   origin: WriteOrigin;
   scheduledFor: Date;
+  reactionType: ReactionType;
 }
 
 export async function insertWriteAction(
@@ -37,6 +39,7 @@ export async function insertWriteAction(
         body: input.body,
         media: input.media,
         origin: input.origin,
+        reaction_type: input.reactionType,
         scheduled_for: input.scheduledFor.toISOString(),
       })
       .select(),

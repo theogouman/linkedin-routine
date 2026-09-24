@@ -151,10 +151,14 @@ export async function unmarkCommentProcessed(commentId: string): Promise<void> {
 export async function setCommentLiked(
   commentId: string,
   likedAt: Date | null,
+  reactionType: string | null = null,
 ): Promise<void> {
   const { error } = await db()
     .from("received_comments")
-    .update({ liked_at: likedAt?.toISOString() ?? null })
+    .update({
+      liked_at: likedAt?.toISOString() ?? null,
+      reaction_type: likedAt === null ? null : reactionType,
+    })
     .eq("id", commentId);
-  if (error) throw new Error(`Enregistrement du like : ${error.message}`);
+  if (error) throw new Error(`Enregistrement de la réaction : ${error.message}`);
 }

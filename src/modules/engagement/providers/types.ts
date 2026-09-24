@@ -8,6 +8,8 @@
  * lire le statut et le corps bruts — c'est là que se joue le coupe-circuit.
  */
 
+import type { ReactionType } from "@/shared/lib/reactions";
+
 export interface CommentMedia {
   /** URL publique ou data-URL de l'image / du GIF joint (FR-005). */
   url: string;
@@ -33,6 +35,15 @@ export interface PublishLikeInput {
   targetType: "post" | "comment";
   providerPostId: string;
   providerCommentId?: string | null;
+  /**
+   * Réaction à poser. `like` par défaut, valeur historique.
+   *
+   * Le type voyage jusqu'ici plutôt que d'être décidé par le fournisseur :
+   * c'est un choix de l'utilisateur, validé au moment du clic, et il doit
+   * partir exactement tel qu'il a été validé même si l'envoi a lieu deux
+   * heures plus tard.
+   */
+  reactionType?: ReactionType;
 }
 
 export interface PublishResult {

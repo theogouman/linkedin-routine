@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Inbox, List, Newspaper, Send, SlidersHorizontal } from "lucide-react";
 import { activeNavRoute, NAV_ROUTES } from "./nav-routes";
+import { scrollAppToTop } from "@/shared/lib/scroll";
 
 /**
  * Navigation principale — barre haute sur desktop, barre flottante basse sur
@@ -23,7 +24,7 @@ import { activeNavRoute, NAV_ROUTES } from "./nav-routes";
  */
 
 const TABS = [
-  { href: NAV_ROUTES[0], label: "Fil", icon: Newspaper, slot: "posts" as const },
+  { href: NAV_ROUTES[0], label: "Feed", icon: Newspaper, slot: "posts" as const },
   { href: NAV_ROUTES[1], label: "Inbox", icon: Inbox, slot: "comments" as const },
   { href: NAV_ROUTES[2], label: "File", icon: Send, slot: "queue" as const },
   { href: NAV_ROUTES[3], label: "Listes", icon: List, slot: null },
@@ -102,6 +103,13 @@ function NavItems({
             className={variant === "top" ? "nc-nav-item nc-nav-item--top" : "nc-nav-item"}
             aria-current={isActive ? "page" : undefined}
             prefetch
+            onClick={(event) => {
+              // Cliquer l'onglet de l'écran courant remonte en haut plutôt que
+              // de re-naviguer vers la même route, qui ne ferait rien.
+              if (!isActive) return;
+              event.preventDefault();
+              scrollAppToTop();
+            }}
           >
             <Icon size={variant === "top" ? 16 : 19} strokeWidth={isActive ? 2.2 : 1.8} aria-hidden />
             <span>{tab.label}</span>

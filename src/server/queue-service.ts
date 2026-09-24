@@ -45,9 +45,9 @@ const ports: QueuePorts = {
 
     if (action.kind === "like") {
       if (action.target_type === "comment" && action.target_comment_id) {
-        await setCommentLiked(action.target_comment_id, sentAt);
+        await setCommentLiked(action.target_comment_id, sentAt, action.reaction_type);
       } else if (action.target_post_id) {
-        await setPostLiked(action.target_post_id, sentAt);
+        await setPostLiked(action.target_post_id, sentAt, action.reaction_type);
       }
       // Un like ne vide pas la file : l'utilisateur peut vouloir commenter
       // ensuite. Seul un commentaire, une réponse ou un « ignorer » explicite

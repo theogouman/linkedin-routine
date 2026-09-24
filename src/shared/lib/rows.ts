@@ -48,6 +48,11 @@ export interface PostRow {
   fetched_at: string;
   is_own: boolean;
   liked_at: string | null;
+  /** Réaction réellement posée : `liked_at` dit quand, celle-ci dit quoi. */
+  reaction_type: string | null;
+  /** Compteurs venus du fournisseur — `null` quand il ne les a pas donnés. */
+  reaction_count: number | null;
+  comment_count: number | null;
   processed_at: string | null;
   processed_reason: "commented" | "ignored" | "liked" | null;
 }
@@ -66,6 +71,7 @@ export interface ReceivedCommentRow {
   published_at: string;
   fetched_at: string;
   liked_at: string | null;
+  reaction_type: string | null;
   processed_at: string | null;
   processed_reason: "replied" | "ignored" | "liked" | null;
 }
@@ -82,6 +88,7 @@ export interface WriteActionRow {
   body: string | null;
   media: unknown;
   origin: WriteOrigin;
+  reaction_type: string;
   status: WriteStatus;
   scheduled_for: string;
   created_at: string;

@@ -13,9 +13,11 @@ import { useCallback, useRef, type ReactNode } from "react";
 export function TooltipGroup({
   children,
   className,
+  style,
 }: {
   children: ReactNode;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   const groupRef = useRef<HTMLDivElement | null>(null);
   const tipRef = useRef<HTMLSpanElement | null>(null);
@@ -77,6 +79,7 @@ export function TooltipGroup({
     <div
       ref={groupRef}
       className={`t-tt-group ${className ?? ""}`}
+      style={style}
       onPointerOver={onTrigger}
       onPointerLeave={hide}
       onFocus={onTrigger}

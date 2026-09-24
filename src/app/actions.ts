@@ -6,9 +6,12 @@ import {
   createList,
   deleteList,
   ensureSelfAccount,
+  getAccountListIds,
   removeAccountFromList,
   renameList,
+  setAccountLists,
 } from "@/modules/lists/server/repository";
+import type { ReactionType } from "@/shared/lib/reactions";
 import { REJECTION_LABELS } from "@/shared/lib/linkedin-url";
 import {
   cancelAction,
@@ -117,6 +120,73 @@ export async function fetchProfilePhotosAction(): Promise<
   }
 }
 
+// ── Actions depuis une carte du fil ────────────────────────────────────────
+
+export interface AccountListsResult extends ActionResult {
+  /** Rattachements AVANT l'action, pour pouvoir les remettre. */
+  previousListIds?: string[];
+  accountName?: string | null;
+}
+
+/**
+ * Retire un créateur de toutes ses listes.
+ *
+ * Le compte n'est pas supprimé : ses publications déjà récupérées gardent un
+ * auteur, et le journal garde ses cibles. Le sortir des listes suffit à le
+ * faire disparaître du fil.
+ *
+ * Les rattachements d'avant sont renvoyés — c'est ce qui rend le bandeau
+ * d'annulation capable d'annuler réellement, plutôt que de le prétendre.
+ */
+export async function removeCreatorAction(accountId: string): Promise<AccountListsResult> {
+  try {
+    const previousListIds = await getAccountListIds(accountId);
+    await setAccountLists(accountId, []);
+    refreshViews();
+    revalidatePath("/listes");
+    return { ok: true, previousListIds };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Remet un créateur dans les listes qu'il occupait — l'annulation. */
+export async function restoreCreatorAction(
+  accountId: string,
+  listIds: string[],
+): Promise<ActionResult> {
+  try {
+    await setAccountLists(accountId, listIds);
+    refreshViews();
+    revalidatePath("/listes");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Remplace l'appartenance d'un créateur (menu « Changer de liste »). */
+export async function setCreatorListsAction(
+  accountId: string,
+  listIds: string[],
+): Promise<AccountListsResult> {
+  try {
+    if (listIds.length === 0) {
+      return {
+        ok: false,
+        message: "Choisis au moins une liste, ou utilise « Supprimer le créateur ».",
+      };
+    }
+    const previousListIds = await getAccountListIds(accountId);
+    await setAccountLists(accountId, listIds);
+    refreshViews();
+    revalidatePath("/listes");
+    return { ok: true, previousListIds };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 // ── Écriture ───────────────────────────────────────────────────────────────
 
 export interface EnqueueActionResult extends ActionResult {
@@ -163,9 +233,12 @@ export async function submitReply(
   }
 }
 
-export async function likePostAction(postId: string): Promise<EnqueueActionResult> {
+export async function likePostAction(
+  postId: string,
+  reactionType?: ReactionType,
+): Promise<EnqueueActionResult> {
   try {
-    const result = await likePost(postId);
+    const result = await likePost(postId, reactionType);
     refreshViews();
     return {
       ok: true,
@@ -177,9 +250,12 @@ export async function likePostAction(postId: string): Promise<EnqueueActionResul
   }
 }
 
-export async function likeCommentAction(commentId: string): Promise<EnqueueActionResult> {
+export async function likeCommentAction(
+  commentId: string,
+  reactionType?: ReactionType,
+): Promise<EnqueueActionResult> {
   try {
-    const result = await likeComment(commentId);
+    const result = await likeComment(commentId, reactionType);
     refreshViews();
     return {
       ok: true,

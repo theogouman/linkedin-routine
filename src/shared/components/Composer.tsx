@@ -185,10 +185,6 @@ export function Composer({
           {submitting ? "Mise en file…" : "Publier"}
         </button>
       </div>
-
-      <p className="mt-2 text-[12px]" style={{ color: "var(--color-text-muted)" }}>
-        Rien ne part immédiatement : l&apos;envoi passe par la file, à rythme humain.
-      </p>
     </div>
   );
 }

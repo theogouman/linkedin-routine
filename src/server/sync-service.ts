@@ -67,6 +67,8 @@ function buildPorts(): SyncPorts {
           postUrl: post.postUrl,
           publishedAt: post.publishedAt,
           isOwn: account.isSelf,
+          reactionCount: post.reactionCount,
+          commentCount: post.commentCount,
         })),
       ),
 

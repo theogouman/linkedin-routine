@@ -63,3 +63,18 @@ suivantes sont incrémentales et ne redemandent que ce qui est paru depuis.
 
 Pour amorcer moins large, baisser `INITIAL_BACKFILL_DAYS` avant la première
 actualisation — après, le curseur est posé et la fenêtre se referme d'elle-même.
+
+
+## Fusion des audiences Maeva
+
+Les trois listes `Maeva Audience N°1/2/3` ont été fusionnées en une seule,
+**`@MaevaPlichard followers`**.
+
+Les effectifs : 93 + 96 + 27 = 216 rattachements, mais **212 comptes uniques** —
+quatre créateurs appartenaient à deux des trois listes. La fusion insère avec
+`on conflict do nothing` ; un déplacement brut aurait violé la clé primaire
+`(list_id, account_id)` sur ces quatre-là.
+
+C'est la liste N°1 qui a été conservée et renommée, les deux autres supprimées :
+elle est la plus ancienne, donc sa position dans l'ordre des listes était déjà
+celle que l'œil connaissait.
