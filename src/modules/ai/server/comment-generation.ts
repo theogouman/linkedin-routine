@@ -2,13 +2,14 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { readEnv, readBoolEnv, requireEnv } from "@/shared/lib/env";
+import { readBoolEnv, requireEnv } from "@/shared/lib/env";
 import {
   COMMENT_MAX_TOKENS,
-  DEFAULT_COMMENT_MODEL,
   supportsEffort,
   thinkingFor,
+  type Effort,
 } from "../lib/model";
+import { loadGenerationSettings } from "./generate";
 import {
   checkVariante,
   orderForDisplay,
@@ -63,8 +64,12 @@ function anthropic(): Anthropic {
   return client;
 }
 
-export function commentModel(): string {
-  return readEnv("COMMENT_MODEL") ?? DEFAULT_COMMENT_MODEL;
+/**
+ * Modèle et effort : ceux choisis dans les Réglages de l'app. À défaut de
+ * choix enregistré, `COMMENT_MODEL` puis Sonnet 5 (cf. `loadGenerationSettings`).
+ */
+export async function commentSettings(): Promise<{ model: string; effort: Effort }> {
+  return loadGenerationSettings();
 }
 
 /**
@@ -207,6 +212,7 @@ async function callModel(
   brainText: string,
   userMessage: string,
   model: string,
+  effort: Effort,
   onSnapshot: (snapshot: string) => void,
 ): Promise<{ payload: GenerationPayload | null; raw: unknown; usage: CommentUsage; stopReason: string | null }> {
   // Même requête qu'avant, en flux. `finalMessage()` rend exactement ce que
@@ -222,7 +228,7 @@ async function callModel(
     messages: [{ role: "user", content: userMessage }],
     ...thinkingFor(model),
     output_config: {
-      ...(supportsEffort(model) ? { effort: "low" as const } : {}),
+      ...(supportsEffort(model) ? { effort } : {}),
       format: zodOutputFormat(generationSchema),
     },
     // Pas de `temperature` : les modèles de la famille Claude 5 l'ont retirée
@@ -253,8 +259,7 @@ export async function generateVariants(
   hooks: GenerationHooks = {},
 ): Promise<CommentGenerationResult> {
   const startedAt = Date.now();
-  const brain = await loadBrain();
-  const model = commentModel();
+  const [brain, { model, effort }] = await Promise.all([loadBrain(), commentSettings()]);
   const { prompt, examples, thematiqueManquant } = await buildUserMessage(request);
 
   let payload: GenerationPayload | null = null;
@@ -288,7 +293,7 @@ export async function generateVariants(
 
     let result;
     try {
-      result = await callModel(brain.text, prompt, model, onSnapshot);
+      result = await callModel(brain.text, prompt, model, effort, onSnapshot);
     } catch (error) {
       throw translate(error);
     }

@@ -12,8 +12,8 @@ import {
 } from "../lib/prompt";
 import { isPlaceholder, PROCESS_FILES, type ProcessKind } from "../lib/process-files";
 import {
+  DEFAULT_COMMENT_MODEL,
   DEFAULT_EFFORT,
-  DEFAULT_MODEL,
   normalizeGenerationSettings,
   supportsEffort,
   type GenerationSettings,
@@ -32,12 +32,17 @@ export const GENERATION_SETTING_KEY = "generation_model";
  * que c'est exactement le genre de réglage qu'on veut pouvoir bouger depuis le
  * téléphone après avoir lu trois propositions fades. La variable reste
  * prioritaire sur le défaut, pour ne pas casser un déploiement qui s'y fie.
+ *
+ * C'est la SEULE source du modèle et de l'effort : le générateur de quatre
+ * propositions la lit aussi. Il lisait auparavant `COMMENT_MODEL` en direct,
+ * si bien que le choix fait dans les Réglages était enregistré sans jamais
+ * être appliqué.
  */
 export async function loadGenerationSettings(): Promise<GenerationSettings> {
   const stored = await readSetting<unknown>(GENERATION_SETTING_KEY);
   if (stored !== null) return normalizeGenerationSettings(stored);
   return normalizeGenerationSettings({
-    model: readEnv("ANTHROPIC_MODEL") ?? DEFAULT_MODEL,
+    model: readEnv("COMMENT_MODEL") ?? readEnv("ANTHROPIC_MODEL") ?? DEFAULT_COMMENT_MODEL,
     effort: readEnv("ANTHROPIC_EFFORT") ?? DEFAULT_EFFORT,
   });
 }

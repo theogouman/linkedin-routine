@@ -6,7 +6,7 @@ import { readIngestionStart } from "@/modules/ingestion/server/start-date";
 import { loadBrain } from "@/modules/ai/server/comment-brain";
 import { corpusStatus } from "@/modules/ai/server/comment-examples-repository";
 import { generationStats } from "@/modules/ai/server/comment-journal";
-import { commentModel } from "@/modules/ai/server/comment-generation";
+import { commentSettings } from "@/modules/ai/server/comment-generation";
 import { countSubscriptions } from "@/modules/notifications/server/push";
 import { readEnv } from "@/shared/lib/env";
 import { PageHeader } from "@/shared/components/PageHeader";
@@ -105,9 +105,10 @@ export interface GeneratorView {
 
 async function describeGenerator(): Promise<GeneratorView> {
   const brain = await loadBrain().catch(() => ({ version: "introuvable" }));
-  const [corpus, stats] = await Promise.all([
+  const [corpus, stats, settings] = await Promise.all([
     corpusStatus().catch(() => null),
     generationStats().catch(() => null),
+    commentSettings().catch(() => null),
   ]);
-  return { model: commentModel(), brainVersion: brain.version, corpus, stats };
+  return { model: settings?.model ?? "inconnu", brainVersion: brain.version, corpus, stats };
 }

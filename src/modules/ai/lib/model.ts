@@ -34,17 +34,17 @@ export const MODEL_CHOICES = [
   {
     id: "claude-haiku-4-5-20251001",
     label: "Haiku 4.5",
-    hint: "Le défaut. Quelques centimes par mois au volume cible.",
+    hint: "Le plus rapide et le moins cher. Imite ta voix moins finement.",
   },
   {
     id: "claude-sonnet-5",
     label: "Sonnet 5",
-    hint: "À essayer si les propositions restent plates une fois tes process rédigés.",
+    hint: "Le défaut : le meilleur compromis entre fidélité à ta voix et vitesse.",
   },
   {
     id: "claude-opus-5",
     label: "Opus 5",
-    hint: "Le plus cher, et le moins justifié pour cinquante mots contraints.",
+    hint: "Le plus lent et le plus cher, pour cinquante mots contraints.",
   },
 ] as const;
 
