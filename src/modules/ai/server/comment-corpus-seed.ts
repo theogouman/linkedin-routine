@@ -197,7 +197,20 @@ export async function topUpEmbeddings(options: { deadline: Date }): Promise<Embe
     const { error } = await db()
       .from("comment_examples")
       .upsert(
-        usable.map(({ row, vector }) => ({ ...row, embedding: JSON.stringify(vector) })),
+        // `id` est RETIRÉ de la charge : la colonne est `generated always as
+        // identity`, et Postgres refuse un INSERT qui la fournit — même quand
+        // la clause ON CONFLICT transformera l'insertion en mise à jour. Le
+        // rapprochement se fait sur (date, texte), pas sur l'identifiant.
+        usable.map(({ row, vector }) => ({
+          date: row.date,
+          lien: row.lien,
+          sur_mon_post: row.sur_mon_post,
+          categorie: row.categorie,
+          mots: row.mots,
+          texte: row.texte,
+          source: row.source,
+          embedding: JSON.stringify(vector),
+        })),
         { onConflict: "date,texte" },
       );
     if (error) throw new Error(`Écriture des embeddings : ${error.message}`);
