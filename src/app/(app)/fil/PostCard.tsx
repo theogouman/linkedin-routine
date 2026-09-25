@@ -32,9 +32,10 @@ import {
   restorePostAction,
   setCreatorListsAction,
   submitComment,
+  type EnqueueActionResult,
 } from "@/app/actions";
 import { asReactionType, reaction as lookupReaction, type ReactionType } from "@/shared/lib/reactions";
-import { relativeTime, scheduledLabel } from "@/shared/lib/format";
+import { dispatchMessage, relativeTime, scheduledLabel } from "@/shared/lib/format";
 
 /**
  * Une publication du feed (FR-004, FR-005, FR-006, FR-010, FR-013).
@@ -96,7 +97,7 @@ export function PostCard({
   const posted = post.liked_at !== null ? asReactionType(post.reaction_type) : null;
 
   const run = (
-    fn: () => Promise<{ ok: boolean; message?: string; scheduledFor?: string }>,
+    fn: () => Promise<EnqueueActionResult>,
     success: string,
   ) => {
     startTransition(async () => {
@@ -105,12 +106,8 @@ export function PostCard({
         toast.error(result.message ?? "Action impossible.");
         return;
       }
-      toast.success(
-        result.scheduledFor
-          ? `${success} — envoi ${scheduledLabel(result.scheduledFor)}.`
-          : success,
-      );
-      if (result.scheduledFor) {
+      toast.success(result.outcome ? dispatchMessage(result, success) : success);
+      if (result.outcome === "queued") {
         setJustQueued(true);
         window.setTimeout(() => setJustQueued(false), 2600);
       }
@@ -378,7 +375,7 @@ export function PostCard({
             onPick={(type: ReactionType) =>
               run(
                 () => likePostAction(post.id, type),
-                `${lookupReaction(type).label} en file`,
+                `Réaction « ${lookupReaction(type).label} » posée`,
               )
             }
           />

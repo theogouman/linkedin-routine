@@ -3,6 +3,7 @@ import { localDateKey, zonedParts } from "@/shared/lib/timezone";
 import {
   computeNextSlot,
   countToday,
+  decideDispatch,
   DEFAULT_POLICY,
   effectiveCaps,
   isWithinSendWindow,
@@ -152,7 +153,7 @@ describe("computeNextSlot", () => {
     expect(result.deferred).toBe(true);
   });
 
-  it("n'envoie jamais plus de 3 commentaires dans une heure glissante", () => {
+  it("n'envoie jamais plus de commentaires que le plafond horaire glissant", () => {
     const now = new Date("2026-03-17T09:00:00Z");
     const existing = [
       at("2026-03-17T08:40:00Z"),
@@ -160,7 +161,7 @@ describe("computeNextSlot", () => {
       at("2026-03-17T08:55:00Z"),
     ];
     const result = computeNextSlot({
-      policy: DEFAULT_POLICY, ramp: MATURE, now, kind: "comment",
+      policy: { ...DEFAULT_POLICY, maxCommentsPerHour: 3 }, ramp: MATURE, now, kind: "comment",
       existing, random: midRandom,
     });
     // Le plus ancien sort de la fenêtre à 9 h 40 ; + délai minimum.
@@ -264,5 +265,99 @@ describe("countToday", () => {
       at("2026-03-16T08:00:00Z", "comment"),
     ], now);
     expect(counts).toEqual({ comments: 1, likes: 1, total: 2 });
+  });
+});
+
+describe("decideDispatch", () => {
+  // Vendredi 25 septembre 2026, 23 h 30 à Paris : hors fenêtre d'émission.
+  const lateFriday = new Date("2026-09-25T21:30:00Z");
+
+  it("publie tout de suite quand rien n'est parti de la journée, même hors fenêtre", () => {
+    const decision = decideDispatch({
+      policy: DEFAULT_POLICY, ramp: MATURE, now: lateFriday, kind: "comment",
+      existing: [], random: midRandom,
+    });
+    expect(decision).toEqual({ mode: "now", waitMs: 0 });
+  });
+
+  it("publie tout de suite un samedi", () => {
+    const saturday = new Date("2026-09-26T10:00:00Z");
+    const decision = decideDispatch({
+      policy: DEFAULT_POLICY, ramp: MATURE, now: saturday, kind: "comment",
+      existing: [], random: midRandom,
+    });
+    expect(decision.mode).toBe("now");
+  });
+
+  it("n'attend que l'écart anti-rafale après un envoi très récent", () => {
+    const decision = decideDispatch({
+      policy: DEFAULT_POLICY, ramp: MATURE, now: lateFriday, kind: "comment",
+      existing: [{ at: new Date(lateFriday.getTime() - 5_000), kind: "comment" }],
+      random: midRandom,
+    });
+    expect(decision).toEqual({ mode: "now", waitMs: 15_000 });
+  });
+
+  it("ignore les actions programmées pour plus tard dans l'écart anti-rafale", () => {
+    const decision = decideDispatch({
+      policy: DEFAULT_POLICY, ramp: MATURE, now: lateFriday, kind: "comment",
+      existing: [{ at: new Date("2026-09-28T06:00:00Z"), kind: "comment" }],
+      random: midRandom,
+    });
+    expect(decision).toEqual({ mode: "now", waitMs: 0 });
+  });
+
+  it("bascule en file au-delà du plafond horaire, sans attendre le lundi matin", () => {
+    const policy = { ...DEFAULT_POLICY, maxCommentsPerHour: 3 };
+    const existing = [10, 20, 30].map((minutes) => ({
+      at: new Date(lateFriday.getTime() - minutes * 60_000),
+      kind: "comment" as const,
+    }));
+    const decision = decideDispatch({
+      policy, ramp: MATURE, now: lateFriday, kind: "comment", existing, random: midRandom,
+    });
+    expect(decision.mode).toBe("queue");
+    if (decision.mode !== "queue") return;
+    expect(decision.deferredReason).toBe("hourly_cap");
+    // Le plus ancien sort de l'heure à 23 h 00 + 1 h → minuit + délai minimum,
+    // et non lundi 8 h : la fenêtre ne s'applique pas à la suite de la session.
+    expect(decision.scheduledFor.getTime()).toBeLessThan(
+      lateFriday.getTime() + 2 * 3_600_000,
+    );
+  });
+
+  it("reporte au prochain créneau ouvré quand le plafond journalier est atteint", () => {
+    const tuesday = new Date("2026-09-29T08:00:00Z"); // 10 h à Paris
+    const caps = effectiveCaps(DEFAULT_POLICY, MATURE, tuesday);
+    const existing = Array.from({ length: caps.comments }, (_, index) => ({
+      at: new Date(tuesday.getTime() - (index + 1) * 20 * 60_000 - 4 * 3_600_000),
+      kind: "comment" as const,
+    })).filter((action) => localDateKey(action.at, TZ) === "2026-09-29");
+    // Complète si la nuit a fait basculer certaines actions la veille.
+    while (existing.length < caps.comments) {
+      existing.push({ at: new Date("2026-09-29T05:00:00Z"), kind: "comment" });
+    }
+    const decision = decideDispatch({
+      policy: DEFAULT_POLICY, ramp: MATURE, now: tuesday, kind: "comment",
+      existing, random: midRandom,
+    });
+    expect(decision.mode).toBe("queue");
+    if (decision.mode !== "queue") return;
+    expect(decision.deferredReason).toBe("daily_cap");
+    expect(localDateKey(decision.scheduledFor, TZ)).toBe("2026-09-30");
+  });
+
+  it("laisse partir un like quand seul le plafond de commentaires est atteint", () => {
+    const tuesday = new Date("2026-09-29T08:00:00Z");
+    const caps = effectiveCaps(DEFAULT_POLICY, MATURE, tuesday);
+    const existing = Array.from({ length: caps.comments }, () => ({
+      at: new Date("2026-09-29T05:00:00Z"),
+      kind: "comment" as const,
+    }));
+    const decision = decideDispatch({
+      policy: DEFAULT_POLICY, ramp: MATURE, now: tuesday, kind: "like",
+      existing, random: midRandom,
+    });
+    expect(decision.mode).toBe("now");
   });
 });

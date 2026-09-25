@@ -10,7 +10,7 @@ import type {
 } from "@/app/actions";
 import { SLOT_LABELS, type Slot } from "@/modules/ai/lib/comment-variants";
 import type { VariantsStreamEvent } from "@/app/api/variants/route";
-import { scheduledLabel } from "@/shared/lib/format";
+import { dispatchMessage } from "@/shared/lib/format";
 import { ErrorMessage, useShake } from "@/shared/motion/ShakeInput";
 import { ThinkingStates } from "@/shared/motion/ThinkingStates";
 
@@ -205,14 +205,10 @@ export function VariantComposer({
         slot: editing === "manuel" || editing === null ? null : editing,
       });
       if (!outcome.ok) {
-        toast.error(outcome.message ?? "Mise en file impossible.");
+        toast.error(outcome.message ?? "Publication impossible.");
         return;
       }
-      toast.success(
-        outcome.deferred
-          ? `Plafond du jour atteint — envoi reporté ${scheduledLabel(outcome.scheduledFor ?? "")}.`
-          : `En file — envoi ${scheduledLabel(outcome.scheduledFor ?? "")}.`,
-      );
+      toast.success(dispatchMessage(outcome, "Publié sur LinkedIn."));
       setValue("");
       setResult(null);
       setEditing(null);
@@ -391,7 +387,7 @@ function Editor({
           disabled={submitting || value.trim() === ""}
           className="nc-btn nc-btn--brand nc-btn--sm"
         >
-          {submitting ? "Mise en file…" : "Publier"}
+          {submitting ? "Publication…" : "Publier"}
         </button>
       </div>
     </div>

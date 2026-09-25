@@ -7,7 +7,21 @@ import {
 } from "@/modules/feed/server/repository";
 import { DEFAULT_REACTION, type ReactionType } from "@/shared/lib/reactions";
 import { getComment, markCommentProcessed } from "@/modules/inbox/server/repository";
-import { enqueueWriteAction, type EnqueueResult } from "@/modules/engagement/server/queue";
+import {
+  enqueueWriteAction as enqueueRaw,
+  type EnqueueRequest,
+  type EnqueueResult,
+} from "@/modules/engagement/server/queue";
+import { queuePorts } from "@/server/queue-service";
+
+/**
+ * Toutes les actions de l'utilisateur passent par ici : envoi immédiat quand
+ * aucune limite n'est atteinte, file sinon. Les ports sont ce qui rend l'envoi
+ * immédiat possible — ils marquent la cible traitée une fois l'action partie.
+ */
+function enqueueWriteAction(request: EnqueueRequest): Promise<EnqueueResult> {
+  return enqueueRaw(request, { ports: queuePorts });
+}
 import {
   generateVariants,
   type CommentGenerationResult,

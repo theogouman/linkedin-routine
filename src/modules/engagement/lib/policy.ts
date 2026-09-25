@@ -35,6 +35,11 @@ export interface QueuePolicy {
   delayMinutes: { min: number; max: number };
   /** Plafond glissant de commentaires par heure. */
   maxCommentsPerHour: number;
+  /**
+   * Écart minimal, en secondes, entre deux envois IMMÉDIATS. Anti-rafale :
+   * deux commentaires publiés à la même seconde ne ressemblent à personne.
+   */
+  minGapSeconds: number;
   window: SendWindow;
   ramp: {
     /** Facteur de départ — 50 % des plafonds pendant `plateauDays`. */
@@ -50,7 +55,8 @@ export const DEFAULT_POLICY: QueuePolicy = {
   timezone: "Europe/Paris",
   caps: { comments: 25, likes: 60, total: 90 },
   delayMinutes: { min: 3, max: 12 },
-  maxCommentsPerHour: 3,
+  maxCommentsPerHour: 8,
+  minGapSeconds: 20,
   window: {
     days: [1, 2, 3, 4, 5],
     startMinute: 8 * 60,
@@ -209,6 +215,11 @@ export interface NextSlotInput {
   existing: ScheduledAction[];
   /** Injecté pour rendre le calcul déterministe en test. */
   random?: () => number;
+  /**
+   * Avant cet instant, la fenêtre d'émission est ignorée (cf.
+   * `SESSION_CONTINUATION_MS`). Absent = fenêtre appliquée partout.
+   */
+  windowFreeUntil?: Date;
 }
 
 export interface NextSlotResult {
@@ -218,6 +229,18 @@ export interface NextSlotResult {
   /** Renseigné quand `deferred` : ce qui a bloqué. */
   deferredReason: "daily_cap" | "hourly_cap" | "window" | null;
 }
+
+/**
+ * Durée pendant laquelle la fenêtre d'émission ne s'applique pas à une action
+ * mise en file.
+ *
+ * La fenêtre (8 h–19 h en semaine) sert à ce que des envois AUTOMATIQUES aient
+ * l'air humains. Mais quand Théo commente lui-même à 23 h, un report de
+ * quarante minutes prolonge sa propre session : le repousser au lundi 8 h
+ * rendrait le commentaire inutile sans rien protéger. Au-delà de ce délai,
+ * l'action n'est plus la suite de sa session, et la fenêtre reprend ses droits.
+ */
+export const SESSION_CONTINUATION_MS = 3 * 3_600_000;
 
 const HOUR_MS = 3_600_000;
 
@@ -253,8 +276,10 @@ export function computeNextSlot(input: NextSlotInput): NextSlotResult {
   );
   let deferredReason: NextSlotResult["deferredReason"] = null;
 
+  const windowFreeUntil = input.windowFreeUntil?.getTime() ?? -Infinity;
+
   for (let guard = 0; guard < 500; guard += 1) {
-    if (!isWithinSendWindow(policy, candidate)) {
+    if (candidate.getTime() > windowFreeUntil && !isWithinSendWindow(policy, candidate)) {
       const opened = nextWindowOpening(policy, candidate);
       if (deferredReason === null) deferredReason = "window";
       candidate = opened;
@@ -315,6 +340,78 @@ export function computeNextSlot(input: NextSlotInput): NextSlotResult {
   throw new Error(
     "Impossible de programmer l'action : les plafonds ou la fenêtre sont trop étroits.",
   );
+}
+
+// ── Envoi immédiat ou file ─────────────────────────────────────────────────
+export type DispatchDecision =
+  | {
+      mode: "now";
+      /** Attente anti-rafale avant l'envoi, en millisecondes (souvent 0). */
+      waitMs: number;
+    }
+  | ({ mode: "queue" } & NextSlotResult);
+
+/**
+ * Envoi immédiat par défaut, file seulement quand une limite est atteinte.
+ *
+ * Théo commente en direct, depuis son téléphone : son geste EST le rythme
+ * humain. Tant qu'aucune limite n'est franchie, l'action part tout de suite,
+ * à toute heure — un commentaire publié le lendemain matin sur un post de la
+ * veille ne sert plus à rien.
+ *
+ * Les limites qui basculent en file :
+ *  - plafond journalier de commentaires, de likes, ou total (montée en charge
+ *    appliquée) ;
+ *  - plafond horaire glissant de commentaires.
+ *
+ * Tout est compté sur ce qui est parti ET ce qui est programmé : une file déjà
+ * chargée pour aujourd'hui consomme le même quota qu'un envoi réel.
+ *
+ * L'écart minimal entre deux envois immédiats n'envoie PAS en file : il ne
+ * coûte que quelques secondes d'attente, absorbées pendant la requête.
+ */
+export function decideDispatch(input: NextSlotInput): DispatchDecision {
+  const { policy, ramp, now, kind } = input;
+  const caps = effectiveCaps(policy, ramp, now);
+  const isComment = kind === "comment" || kind === "reply";
+
+  const todayKey = localDateKey(now, policy.timezone);
+  const today = input.existing.filter(
+    (action) => localDateKey(action.at, policy.timezone) === todayKey,
+  );
+  const todayOfKind = today.filter((action) =>
+    isComment ? action.kind !== "like" : action.kind === "like",
+  ).length;
+  const kindCap = isComment ? caps.comments : caps.likes;
+
+  const hourStart = now.getTime() - HOUR_MS;
+  const commentsLastHour = input.existing.filter(
+    (action) =>
+      action.kind !== "like" &&
+      action.at.getTime() > hourStart &&
+      action.at.getTime() <= now.getTime(),
+  ).length;
+
+  const underDaily = today.length < caps.total && todayOfKind < kindCap;
+  const underHourly = !isComment || commentsLastHour < policy.maxCommentsPerHour;
+
+  if (underDaily && underHourly) {
+    const lastPast = input.existing
+      .map((action) => action.at.getTime())
+      .filter((at) => at <= now.getTime())
+      .reduce((max, at) => Math.max(max, at), -Infinity);
+    const gapMs = policy.minGapSeconds * 1000;
+    const waitMs = Math.max(0, Math.round(lastPast + gapMs - now.getTime()));
+    return { mode: "now", waitMs };
+  }
+
+  return {
+    mode: "queue",
+    ...computeNextSlot({
+      ...input,
+      windowFreeUntil: new Date(now.getTime() + SESSION_CONTINUATION_MS),
+    }),
+  };
 }
 
 /** Compteurs du jour local courant, pour l'affichage de la file. */

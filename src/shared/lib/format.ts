@@ -73,3 +73,31 @@ export function parseMinuteOfDay(value: string): number | null {
   if (hours > 23 || minutes > 59) return null;
   return hours * 60 + minutes;
 }
+
+/**
+ * Message affiché après une publication.
+ *
+ * Le motif d'un report est toujours nommé : « plafond du jour » ne doit
+ * apparaître que si le plafond est RÉELLEMENT atteint. L'ancien message le
+ * disait pour tout report au lendemain, fenêtre horaire comprise — d'où un
+ * « plafond atteint » affiché sans qu'aucun commentaire ne soit parti.
+ */
+export function dispatchMessage(
+  result: {
+    outcome?: "sent" | "failed" | "queued";
+    scheduledFor?: string;
+    deferredReason?: string | null;
+    cap?: number;
+  },
+  sentLabel: string,
+): string {
+  if (result.outcome === "sent") return sentLabel;
+  const when = result.scheduledFor ? scheduledLabel(result.scheduledFor) : "plus tard";
+  if (result.deferredReason === "daily_cap") {
+    return `Plafond du jour atteint${result.cap ? ` (${result.cap})` : ""} — envoi ${when}.`;
+  }
+  if (result.deferredReason === "hourly_cap") {
+    return `Rythme horaire atteint — envoi ${when}.`;
+  }
+  return `En file — envoi ${when}.`;
+}

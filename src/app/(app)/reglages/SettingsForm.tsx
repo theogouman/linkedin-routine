@@ -264,7 +264,8 @@ export function SettingsForm({
         <div className="flex flex-col gap-4 px-4 pb-4">
           <div>
             <p className="mb-2 text-[12px]" style={{ color: "var(--color-text-muted)" }}>
-              Appliqués après le facteur de montée en charge.
+              Sous ces plafonds, chaque action part immédiatement. Au-delà, elle passe en
+              file. Facteur de montée en charge appliqué.
             </p>
             <div className="grid grid-cols-3 gap-2">
               <NumberField label="Commentaires" value={caps.comments} onChange={(v) => setCaps({ ...caps, comments: v })} />
@@ -274,7 +275,8 @@ export function SettingsForm({
           </div>
           <div>
             <p className="mb-2 text-[12px]" style={{ color: "var(--color-text-muted)" }}>
-              Délai aléatoire entre deux envois, et plafond horaire de commentaires.
+              Délai aléatoire entre deux envois de la file, et plafond horaire de
+              commentaires — au-delà, les suivants passent en file.
             </p>
             <div className="grid grid-cols-3 gap-2">
               <NumberField label="Délai min (min)" value={delay.min} onChange={(v) => setDelay({ ...delay, min: v })} />
@@ -295,7 +297,9 @@ export function SettingsForm({
       >
         <div className="flex flex-col gap-3 px-4 pb-4">
           <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
-            Aucun envoi hors de ces plages.
+            Ne concerne que la file : un envoi immédiat part à toute heure. Une action
+            en file part aussi hors plage dans les 3 h qui suivent (c&apos;est la suite
+            de ta session) ; au-delà, elle attend la prochaine plage.
           </p>
           <div className={windowShake.wrapClassName}>
             <div className="flex items-center gap-2">

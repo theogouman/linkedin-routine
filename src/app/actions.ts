@@ -21,7 +21,7 @@ import {
 import { canResume } from "@/modules/engagement/lib/circuit";
 import { POST_BREAKER_START_FACTOR } from "@/modules/engagement/lib/policy";
 import { savePolicy } from "@/modules/engagement/server/settings";
-import { QueueSuspendedError } from "@/modules/engagement/server/queue";
+import { QueueSuspendedError, type EnqueueResult } from "@/modules/engagement/server/queue";
 import {
   commentOnPost,
   ignoreComment,
@@ -252,6 +252,25 @@ export interface EnqueueActionResult extends ActionResult {
   scheduledFor?: string;
   deferred?: boolean;
   deferredReason?: string | null;
+  /** `sent` : publié tout de suite. `failed` : tentative immédiate ratée. `queued` : en file. */
+  outcome?: "sent" | "failed" | "queued";
+  /** Plafond journalier effectif pour le type d'action, pour expliquer un report. */
+  cap?: number;
+}
+
+function dispatchFields(result: EnqueueResult): Pick<EnqueueActionResult, "outcome" | "cap" | "ok" | "message"> {
+  if (result.outcome === "failed") {
+    return {
+      ok: false,
+      outcome: "failed",
+      message: `Échec de publication : ${result.sendError ?? "erreur inconnue"}`,
+    };
+  }
+  return {
+    ok: true,
+    outcome: result.outcome,
+    cap: result.action.kind === "like" ? result.caps.likes : result.caps.comments,
+  };
 }
 
 export async function submitComment(
@@ -270,10 +289,10 @@ export async function submitComment(
     });
     refreshViews();
     return {
-      ok: true,
       scheduledFor: result.scheduledFor.toISOString(),
       deferred: result.deferred,
       deferredReason: result.deferredReason,
+      ...dispatchFields(result),
     };
   } catch (error) {
     return fail(error);
@@ -296,10 +315,10 @@ export async function submitReply(
     });
     refreshViews();
     return {
-      ok: true,
       scheduledFor: result.scheduledFor.toISOString(),
       deferred: result.deferred,
       deferredReason: result.deferredReason,
+      ...dispatchFields(result),
     };
   } catch (error) {
     return fail(error);
@@ -314,9 +333,10 @@ export async function likePostAction(
     const result = await likePost(postId, reactionType);
     refreshViews();
     return {
-      ok: true,
       scheduledFor: result.scheduledFor.toISOString(),
       deferred: result.deferred,
+      deferredReason: result.deferredReason,
+      ...dispatchFields(result),
     };
   } catch (error) {
     return fail(error);
@@ -331,9 +351,10 @@ export async function likeCommentAction(
     const result = await likeComment(commentId, reactionType);
     refreshViews();
     return {
-      ok: true,
       scheduledFor: result.scheduledFor.toISOString(),
       deferred: result.deferred,
+      deferredReason: result.deferredReason,
+      ...dispatchFields(result),
     };
   } catch (error) {
     return fail(error);

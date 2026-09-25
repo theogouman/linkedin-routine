@@ -17,8 +17,9 @@ import {
   ignoreCommentAction,
   likeCommentAction,
   submitReply,
+  type EnqueueActionResult,
 } from "@/app/actions";
-import { relativeTime, scheduledLabel } from "@/shared/lib/format";
+import { dispatchMessage, relativeTime, scheduledLabel } from "@/shared/lib/format";
 import {
   asReactionType,
   reaction as lookupReaction,
@@ -42,7 +43,7 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
   const indent = Math.min(comment.depth, 3) * 14;
 
   const run = (
-    fn: () => Promise<{ ok: boolean; message?: string; scheduledFor?: string }>,
+    fn: () => Promise<EnqueueActionResult>,
     success: string,
   ) => {
     startTransition(async () => {
@@ -51,10 +52,8 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
         toast.error(result.message ?? "Action impossible.");
         return;
       }
-      toast.success(
-        result.scheduledFor ? `${success} — envoi ${scheduledLabel(result.scheduledFor)}.` : success,
-      );
-      if (result.scheduledFor) {
+      toast.success(result.outcome ? dispatchMessage(result, success) : success);
+      if (result.outcome === "queued") {
         setJustQueued(true);
         window.setTimeout(() => setJustQueued(false), 2600);
       }
@@ -130,7 +129,7 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
           onPick={(type: ReactionType) =>
             run(
               () => likeCommentAction(comment.id, type),
-              `${lookupReaction(type).label} en file`,
+              `Réaction « ${lookupReaction(type).label} » posée`,
             )
           }
         />
