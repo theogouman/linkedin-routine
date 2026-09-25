@@ -342,6 +342,34 @@ provisioning.
 Coût : à `claude-haiku-4-5-20251001`, une génération consomme quelques
 centaines de tokens. 25 générations par jour se comptent en centimes par mois.
 
+### `COMMENT_MODEL`, `COMMENT_CACHE_1H` — optionnelles
+
+Le **générateur de quatre variantes** (celui qui propose une question, une
+réaction courte, un avis et une vanne sous chaque post) a son propre modèle,
+distinct de celui ci-dessus.
+
+```
+COMMENT_MODEL=claude-sonnet-5   # défaut
+COMMENT_CACHE_1H=0              # 1 pour passer le cache du cerveau à 1 h
+```
+
+Pourquoi un modèle plus capable que pour les process : imiter une voix à partir
+de cinq exemples et produire quatre registres franchement différents n'est pas
+de la mise en forme. C'est la seule partie de l'app où un modèle faible se voit
+immédiatement — et se voit publiquement, sous le nom de Théo.
+
+La réflexion est **désactivée explicitement** sur ce modèle, pas seulement
+abaissée : omettre le paramètre `thinking` sur Sonnet 5 le fait partir en
+adaptatif, donc payer des tokens de raisonnement pour écrire quatre phrases de
+quinze mots. Le code ne l'envoie que là où `disabled` est accepté — Fable 5 et
+Opus 5.5 le rejettent, Haiku 4.5 ne réfléchit pas quand on ne dit rien.
+
+`COMMENT_CACHE_1H` ne vaut le coup que si tes sessions d'engagement sont
+espacées de plus de cinq minutes. Le cache par défaut dure cinq minutes et son
+horloge repart à chaque lecture : une session où les générations s'enchaînent
+tient entièrement dedans. La fenêtre d'une heure coûte 2x le prix d'entrée à
+l'écriture, contre 1,25x.
+
 ### `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT` — optionnelles
 
 > Le modèle et l'effort se règlent **depuis l'écran Réglages**, et ce réglage

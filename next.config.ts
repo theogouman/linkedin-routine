@@ -16,6 +16,11 @@ const nextConfig: NextConfig = {
   // bundle serveur et la génération retomberait sur un process vide.
   outputFileTracingIncludes: {
     "/api/**": ["./process/**"],
+    // Le cerveau du générateur de commentaires est lu au runtime comme les
+    // process. Sans inclusion explicite, le tracing le laisse hors du bundle
+    // et la génération échoue en production sur un fichier introuvable — pas
+    // en local, où le disque contient tout le dépôt.
+    "/**": ["./src/modules/ai/assets/**"],
   },
 };
 

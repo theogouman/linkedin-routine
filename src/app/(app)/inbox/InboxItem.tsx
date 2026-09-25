@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Check, CornerDownRight, ExternalLink, Reply } from "lucide-react";
 import type { InboxComment } from "@/modules/inbox/server/repository";
 import { Avatar } from "@/shared/components/Avatar";
-import { Composer } from "@/shared/components/Composer";
+import { VariantComposer } from "@/shared/components/VariantComposer";
 import { InlineToast } from "@/shared/motion/InlineToast";
 import { LearnMoreLink } from "@/shared/motion/LearnMoreLink";
 import { ReactionPicker } from "@/shared/motion/ReactionPicker";
@@ -14,7 +14,7 @@ import { PanelReveal } from "@/shared/motion/PanelReveal";
 import { SuccessCheck } from "@/shared/motion/SuccessCheck";
 import { TooltipGroup } from "@/shared/motion/Tooltip";
 import {
-  generateForCommentAction,
+  generateVariantsForCommentAction,
   ignoreCommentAction,
   likeCommentAction,
   submitReply,
@@ -180,11 +180,10 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
           } as React.CSSProperties
         }
       >
-        <Composer
+        <VariantComposer
           placeholder="Ta réponse…"
-          generateLabel="Générer une réponse"
-          onGenerate={() => generateForCommentAction(comment.id)}
-          onSubmit={(body, origin) => submitReply(comment.id, body, origin)}
+          onGenerate={(intention) => generateVariantsForCommentAction(comment.id, intention)}
+          onSubmit={(body, origin, from) => submitReply(comment.id, body, origin, from)}
           onDone={() => {
             setReplyOpen(false);
             router.refresh();

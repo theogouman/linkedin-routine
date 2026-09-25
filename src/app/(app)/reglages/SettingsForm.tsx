@@ -11,6 +11,8 @@ import {
   setSelfProfileAction,
 } from "@/app/actions";
 import { EFFORTS, MODEL_CHOICES, type Effort, type GenerationSettings } from "@/modules/ai/lib/model";
+import { SLOT_LABELS, type Slot } from "@/modules/ai/lib/comment-variants";
+import type { GeneratorView } from "./page";
 import { logout } from "@/modules/auth/server/actions";
 import { formatMinuteOfDay, parseMinuteOfDay, relativeTime } from "@/shared/lib/format";
 import { Accordion } from "@/shared/motion/Accordion";
@@ -52,12 +54,14 @@ type Section =
   | "process"
   | "notifications"
   | "recuperation"
+  | "generateur"
   | "diagnostics";
 
 export function SettingsForm({
   policy,
   selfProfileUrl,
   ingestionStart,
+  generator,
   processes,
   generation,
   vapidPublicKey,
@@ -69,6 +73,7 @@ export function SettingsForm({
   selfProfileUrl: string | null;
   /** Date de départ du corpus, en ISO. `null` = aucune borne fixée. */
   ingestionStart: string | null;
+  generator: GeneratorView;
   processes: Array<{ kind: string; file: string; placeholder: boolean }>;
   generation: GenerationSettings;
   vapidPublicKey: string | null;
@@ -522,6 +527,84 @@ export function SettingsForm({
 
       <Accordion
         className="nc-card nc-content-enter overflow-hidden"
+        open={open === "generateur"}
+        onToggle={() => toggle("generateur")}
+        title="Générateur de commentaires"
+        meta={
+          generator.corpus === null
+            ? "Migration non appliquée"
+            : `${generator.corpus.total} exemples`
+        }
+      >
+        <div className="flex flex-col gap-3 px-4 pb-4 text-[13px]">
+          <Row label="Modèle" value={generator.model} />
+          {/* L'empreinte du cerveau, et pas une date de déploiement : on
+              redéploie pour mille raisons, on ne change le cerveau que pour
+              une. C'est elle qui permet de comparer un avant et un après. */}
+          <Row label="Cerveau" value={generator.brainVersion} />
+          {generator.corpus === null ? (
+            <p style={{ color: "var(--color-brand)" }}>
+              Table <code>comment_examples</code> absente — applique la migration
+              009 puis lance <code>scripts/import-comment-examples.mjs</code>.
+            </p>
+          ) : (
+            <>
+              <Row
+                label="Corpus"
+                value={`${generator.corpus.total} exemples, ${generator.corpus.embedded} avec embedding`}
+              />
+              {generator.corpus.embedded === 0 ? (
+                <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+                  Sans embedding, le cinquième exemple — celui choisi pour sa
+                  proximité au post — est tiré au hasard. Les quatre autres ne
+                  changent pas.
+                </p>
+              ) : null}
+            </>
+          )}
+
+          {generator.stats && generator.stats.total > 0 ? (
+            <div className="flex flex-col gap-1.5 border-t pt-3" style={{ borderColor: "var(--color-border-default)" }}>
+              <p className="mb-0.5 text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+                Sur les {generator.stats.total} dernières générations.
+              </p>
+              <Row
+                label="Une variante publiée"
+                value={`${pct(generator.stats.publiees, generator.stats.total)} (${generator.stats.publiees})`}
+              />
+              <Row
+                label="Publiée sans retouche"
+                value={`${pct(generator.stats.sansRetouche, generator.stats.total)} (${generator.stats.sansRetouche})`}
+              />
+              <Row
+                label="Distance d'édition moyenne"
+                value={
+                  generator.stats.distanceMoyenne === null
+                    ? "—"
+                    : generator.stats.distanceMoyenne.toFixed(2)
+                }
+              />
+              <Row
+                label="Lecture de cache"
+                value={
+                  generator.stats.cacheRate === null
+                    ? "—"
+                    : pct(Math.round(generator.stats.cacheRate * generator.stats.total), generator.stats.total)
+                }
+              />
+              <Counts label="Emplacements retenus" counts={generator.stats.parSlot} labels={SLOT_LABELS} />
+              <Counts label="Badges levés" counts={generator.stats.parBadge} />
+            </div>
+          ) : (
+            <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+              Aucune génération enregistrée pour l&apos;instant.
+            </p>
+          )}
+        </div>
+      </Accordion>
+
+      <Accordion
+        className="nc-card nc-content-enter overflow-hidden"
         open={open === "diagnostics"}
         onToggle={() => toggle("diagnostics")}
         title="Diagnostics"
@@ -674,4 +757,42 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
   const output = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
   return output;
+}
+
+function pct(part: number, total: number): string {
+  return total === 0 ? "—" : `${Math.round((100 * part) / total)} %`;
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span style={{ color: "var(--color-text-muted)" }}>{label}</span>
+      <span className="text-right font-medium tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function Counts({
+  label,
+  counts,
+  labels,
+}: {
+  label: string;
+  counts: Record<string, number>;
+  labels?: Record<Slot, string>;
+}) {
+  const entries = Object.entries(counts).sort((left, right) => right[1] - left[1]);
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <span style={{ color: "var(--color-text-muted)" }}>{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {entries.map(([key, count]) => (
+          <span key={key} className="nc-variant-badge">
+            {labels?.[key as Slot] ?? key} · {count}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }

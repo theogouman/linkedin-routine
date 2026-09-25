@@ -24,8 +24,6 @@ import { savePolicy } from "@/modules/engagement/server/settings";
 import { QueueSuspendedError } from "@/modules/engagement/server/queue";
 import {
   commentOnPost,
-  generateForComment,
-  generateForPost,
   ignoreComment,
   ignorePost,
   likeComment,
@@ -34,6 +32,12 @@ import {
   restorePost,
 } from "@/server/engagement-service";
 import { enrichProfiles, restartIngestion, synchronize } from "@/server/sync-service";
+import {
+  generateVariantsForComment,
+  generateVariantsForPost,
+} from "@/server/engagement-service";
+import type { Badge } from "@/modules/ai/lib/comment-checks";
+import { asIntention, type Slot } from "@/modules/ai/lib/comment-variants";
 import { saveGenerationSettings } from "@/modules/ai/server/generate";
 import type { Effort } from "@/modules/ai/lib/model";
 
@@ -258,9 +262,16 @@ export async function submitComment(
   postId: string,
   body: string,
   origin: "manual" | "ai_edited" | "ai_unchanged",
+  from?: { generationId: string | null; slot: Slot | null },
 ): Promise<EnqueueActionResult> {
   try {
-    const result = await commentOnPost({ postId, body, origin });
+    const result = await commentOnPost({
+      postId,
+      body,
+      origin,
+      generationId: from?.generationId ?? null,
+      slot: from?.slot ?? null,
+    });
     refreshViews();
     return {
       ok: true,
@@ -277,9 +288,16 @@ export async function submitReply(
   commentId: string,
   body: string,
   origin: "manual" | "ai_edited" | "ai_unchanged",
+  from?: { generationId: string | null; slot: Slot | null },
 ): Promise<EnqueueActionResult> {
   try {
-    const result = await replyToComment({ commentId, body, origin });
+    const result = await replyToComment({
+      commentId,
+      body,
+      origin,
+      generationId: from?.generationId ?? null,
+      slot: from?.slot ?? null,
+    });
     refreshViews();
     return {
       ok: true,
@@ -358,36 +376,7 @@ export async function ignoreCommentAction(commentId: string): Promise<ActionResu
 
 // ── Génération ─────────────────────────────────────────────────────────────
 
-export interface GenerateResult extends ActionResult {
-  text?: string;
-  placeholderProcess?: boolean;
-}
 
-export async function generateForPostAction(postId: string): Promise<GenerateResult> {
-  try {
-    const result = await generateForPost(postId);
-    return {
-      ok: true,
-      text: result.text,
-      placeholderProcess: result.usedPlaceholderProcess,
-    };
-  } catch (error) {
-    return fail(error);
-  }
-}
-
-export async function generateForCommentAction(commentId: string): Promise<GenerateResult> {
-  try {
-    const result = await generateForComment(commentId);
-    return {
-      ok: true,
-      text: result.text,
-      placeholderProcess: result.usedPlaceholderProcess,
-    };
-  } catch (error) {
-    return fail(error);
-  }
-}
 
 // ── Listes ─────────────────────────────────────────────────────────────────
 
@@ -534,6 +523,73 @@ export async function savePolicyAction(patch: {
     await savePolicy(patch as never);
     revalidatePath("/file");
     return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+// ── Générateur de quatre variantes ─────────────────────────────────────────
+/**
+ * Forme sérialisable d'une variante, telle qu'elle traverse la frontière
+ * serveur → client. Les expressions régulières et les objets d'erreur restent
+ * côté serveur ; ce qui passe est ce qui s'affiche.
+ */
+export interface VarianteView {
+  slot: Slot;
+  texte: string;
+  extraitPost: string;
+  faitUtilise: string | null;
+  positionUtilisee: string | null;
+  coquille: boolean;
+  badges: Badge[];
+}
+
+export interface VariantsActionResult extends ActionResult {
+  generationId?: string | null;
+  postExploitable?: boolean;
+  variantes?: VarianteView[];
+  /** Le cinquième exemple manquait : les embeddings ne sont pas calculés. */
+  thematiqueManquant?: boolean;
+  /** Lecture de cache nulle hors premier appel — quelque chose varie en system. */
+  cacheWarning?: boolean;
+}
+
+function toView(result: Awaited<ReturnType<typeof generateVariantsForPost>>): VariantsActionResult {
+  return {
+    ok: true,
+    generationId: result.generationId,
+    postExploitable: result.postExploitable,
+    thematiqueManquant: result.thematiqueManquant,
+    cacheWarning: result.cacheWarning,
+    variantes: result.variantes.map((variante) => ({
+      slot: variante.slot,
+      texte: variante.texte,
+      extraitPost: variante.extrait_post,
+      faitUtilise: variante.fait_utilise,
+      positionUtilisee: variante.position_utilisee,
+      coquille: variante.coquille,
+      badges: variante.badges,
+    })),
+  };
+}
+
+export async function generateVariantsForPostAction(
+  postId: string,
+  intention?: string | null,
+): Promise<VariantsActionResult> {
+  try {
+    return toView(await generateVariantsForPost(postId, asIntention(intention)));
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function generateVariantsForCommentAction(
+  commentId: string,
+  intention?: string | null,
+): Promise<VariantsActionResult> {
+  try {
+    return toView(await generateVariantsForComment(commentId, asIntention(intention)));
   } catch (error) {
     return fail(error);
   }

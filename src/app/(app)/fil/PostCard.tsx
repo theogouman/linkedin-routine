@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Check, MessageSquare, MoreHorizontal, Undo2 } from "lucide-react";
 import type { FeedPost } from "@/modules/feed/server/repository";
 import { Avatar } from "@/shared/components/Avatar";
-import { Composer } from "@/shared/components/Composer";
+import { VariantComposer } from "@/shared/components/VariantComposer";
 import { ListPickerMenu } from "@/shared/components/ListPickerMenu";
 import { ReactionIcon } from "@/shared/components/ReactionIcon";
 import {
@@ -27,7 +27,7 @@ import { ReactionPicker } from "@/shared/motion/ReactionPicker";
 import { SuccessCheck } from "@/shared/motion/SuccessCheck";
 import { TooltipGroup } from "@/shared/motion/Tooltip";
 import {
-  generateForPostAction,
+  generateVariantsForPostAction,
   ignorePostAction,
   likePostAction,
   restorePostAction,
@@ -411,11 +411,10 @@ export function PostCard({
 
         {/* Ouvert d'emblée : commenter est le geste normal de cet écran. */}
         <div className="border-t px-4 py-3" style={{ borderColor: "var(--color-border-default)" }}>
-          <Composer
+          <VariantComposer
             placeholder="Ton commentaire…"
-            generateLabel="Générer un commentaire"
-            onGenerate={() => generateForPostAction(post.id)}
-            onSubmit={(body, origin) => submitComment(post.id, body, origin)}
+            onGenerate={(intention) => generateVariantsForPostAction(post.id, intention)}
+            onSubmit={(body, origin, from) => submitComment(post.id, body, origin, from)}
             onDone={() => router.refresh()}
           />
         </div>

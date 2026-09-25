@@ -3,6 +3,10 @@ import { getProcessStatus, loadGenerationSettings } from "@/modules/ai/server/ge
 import { getSelfAccount } from "@/modules/lists/server/repository";
 import { getCursors, getRecentSyncRuns } from "@/modules/ingestion/server/cursors";
 import { readIngestionStart } from "@/modules/ingestion/server/start-date";
+import { loadBrain } from "@/modules/ai/server/comment-brain";
+import { corpusStatus } from "@/modules/ai/server/comment-examples-repository";
+import { generationStats } from "@/modules/ai/server/comment-journal";
+import { commentModel } from "@/modules/ai/server/comment-generation";
 import { countSubscriptions } from "@/modules/notifications/server/push";
 import { readEnv } from "@/shared/lib/env";
 import { PageHeader } from "@/shared/components/PageHeader";
@@ -33,6 +37,11 @@ export default async function SettingsPage() {
       readIngestionStart(),
     ]);
 
+  // Le générateur peut tourner sans que sa migration soit appliquée : on
+  // affiche alors « pas encore installé » plutôt que de faire tomber l'écran
+  // des réglages, qui sert aussi à diagnostiquer ce genre de situation.
+  const generator = await describeGenerator();
+
   const failedCursors = cursors.filter((cursor) => cursor.consecutive_failures > 0);
 
   return (
@@ -52,6 +61,7 @@ export default async function SettingsPage() {
         }}
         selfProfileUrl={self?.profile_url ?? null}
         ingestionStart={startDate?.toISOString() ?? null}
+        generator={generator}
         processes={processes}
         generation={generation}
         vapidPublicKey={readEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY") ?? null}
@@ -76,4 +86,28 @@ export default async function SettingsPage() {
       />
     </>
   );
+}
+
+export interface GeneratorView {
+  model: string;
+  brainVersion: string;
+  corpus: { total: number; embedded: number } | null;
+  stats: {
+    total: number;
+    publiees: number;
+    sansRetouche: number;
+    distanceMoyenne: number | null;
+    parSlot: Record<string, number>;
+    parBadge: Record<string, number>;
+    cacheRate: number | null;
+  } | null;
+}
+
+async function describeGenerator(): Promise<GeneratorView> {
+  const brain = await loadBrain().catch(() => ({ version: "introuvable" }));
+  const [corpus, stats] = await Promise.all([
+    corpusStatus().catch(() => null),
+    generationStats().catch(() => null),
+  ]);
+  return { model: commentModel(), brainVersion: brain.version, corpus, stats };
 }

@@ -72,3 +72,52 @@ const EFFORT_CAPABLE_MODEL = /^claude-(opus|sonnet|fable)-5/;
 export function supportsEffort(model: string): boolean {
   return EFFORT_CAPABLE_MODEL.test(model);
 }
+
+// ── Génération de commentaires (brief §4) ──────────────────────────────────
+/**
+ * Modèle du générateur de commentaires, distinct de celui des process.
+ *
+ * Sonnet 5 par défaut : imiter une voix à partir de cinq exemples et produire
+ * quatre registres franchement différents demande plus qu'une mise en forme
+ * contrainte. Surchargeable par `COMMENT_MODEL` sans redéploiement de code.
+ */
+export const DEFAULT_COMMENT_MODEL = "claude-sonnet-5";
+
+/** Quatre commentaires courts ne tiennent pas dans moins, ni n'ont besoin de plus. */
+export const COMMENT_MAX_TOKENS = 800;
+
+/**
+ * Réflexion minimisée, pas juste abaissée.
+ *
+ * Sur Sonnet 5, OMETTRE `thinking` ne coupe pas la réflexion : le modèle part
+ * en adaptatif, et paie des tokens de raisonnement pour écrire quatre phrases
+ * de quinze mots. Il faut la désactiver explicitement.
+ *
+ * Mais `{ type: "disabled" }` n'est pas accepté partout : Fable 5 et Opus 5.5
+ * le rejettent en 400, et les modèles antérieurs à la famille 4.6 attendent
+ * `budget_tokens` — chez eux, omettre le paramètre suffit à ne pas réfléchir.
+ * D'où cette fonction plutôt qu'une constante : `COMMENT_MODEL` est réglable,
+ * et une valeur mal choisie ne doit pas faire échouer chaque génération.
+ */
+const DISABLED_THINKING_OK = [
+  /^claude-sonnet-5(?!-)/,
+  /^claude-sonnet-4-6/,
+  /^claude-opus-5(?!-5)/,
+  /^claude-opus-4-[678]/,
+];
+
+export function supportsDisabledThinking(model: string): boolean {
+  return DISABLED_THINKING_OK.some((pattern) => pattern.test(model));
+}
+
+/**
+ * Bloc `thinking` à transmettre, ou rien.
+ *
+ * Renvoyer un objet à étaler (`...thinkingFor(model)`) plutôt qu'un booléen :
+ * l'appelant ne doit pas avoir à réinventer la forme du paramètre, ni à se
+ * souvenir que « pas de réflexion » s'écrit tantôt `disabled`, tantôt par
+ * l'absence du champ.
+ */
+export function thinkingFor(model: string): { thinking?: { type: "disabled" } } {
+  return supportsDisabledThinking(model) ? { thinking: { type: "disabled" } } : {};
+}

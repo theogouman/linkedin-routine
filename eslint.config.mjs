@@ -14,6 +14,10 @@ const eslintConfig = [
       ".claude/**",
       "public/sw.js",
       "next-env.d.ts",
+      // Fonctions Edge Supabase : elles tournent sous Deno, avec ses globales
+      // et ses imports par URL. Les typer et les linter avec la config Next
+      // n'apprendrait rien sur elles.
+      "supabase/functions/**",
     ],
   },
   ...nextCoreWebVitals,

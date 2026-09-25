@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MODEL, normalizeGenerationSettings, supportsEffort } from "./model";
+import {
+  DEFAULT_COMMENT_MODEL,
+  DEFAULT_MODEL,
+  normalizeGenerationSettings,
+  supportsDisabledThinking,
+  supportsEffort,
+  thinkingFor,
+} from "./model";
 
 describe("modèle de génération", () => {
   it("cible Haiku par défaut", () => {
@@ -54,5 +61,30 @@ describe("réglage de génération stocké", () => {
 
   it("ignore une valeur vide", () => {
     expect(normalizeGenerationSettings({ model: "   " }).model).toBe(DEFAULT_MODEL);
+  });
+});
+
+describe("génération de commentaires — capacités du modèle", () => {
+  it("désactive explicitement la réflexion là où c'est accepté", () => {
+    expect(thinkingFor("claude-sonnet-5")).toEqual({ thinking: { type: "disabled" } });
+    expect(thinkingFor("claude-opus-5")).toEqual({ thinking: { type: "disabled" } });
+    expect(thinkingFor("claude-opus-4-8")).toEqual({ thinking: { type: "disabled" } });
+  });
+
+  it("omet le paramètre là où il ferait échouer l'appel", () => {
+    // Fable et Opus 5.5 rejettent `disabled` en 400 ; Haiku 4.5 attend
+    // `budget_tokens`, et ne réfléchit pas quand on ne dit rien.
+    expect(thinkingFor("claude-fable-5-1")).toEqual({});
+    expect(thinkingFor("claude-opus-5-5")).toEqual({});
+    expect(thinkingFor("claude-haiku-4-5-20251001")).toEqual({});
+  });
+
+  it("ne confond pas opus-5 et opus-5-5", () => {
+    expect(supportsDisabledThinking("claude-opus-5")).toBe(true);
+    expect(supportsDisabledThinking("claude-opus-5-5")).toBe(false);
+  });
+
+  it("transmet l'effort au modèle par défaut du générateur", () => {
+    expect(supportsEffort(DEFAULT_COMMENT_MODEL)).toBe(true);
   });
 });

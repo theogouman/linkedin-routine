@@ -1929,6 +1929,70 @@ body.nc-kb-open .nc-nav-pill-bar {
 .t-tt-group.nc-tt-block { display: block; width: 100%; }
 .t-tt-group.nc-tt-row { display: flex; width: 100%; }
 
+/* ── Propositions de commentaire ────────────────────────────────────────── */
+/* Une carte par emplacement. Elles sont cliquables en entier : sur téléphone,
+   viser un lien « éditer » de quarante pixels est un aller-retour de plus. */
+.nc-variant {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--nc-radius-xs);
+  background: var(--color-surface-card);
+  cursor: pointer;
+  transition:
+    border-color var(--card-dur, 200ms) ease,
+    background var(--card-dur, 200ms) ease,
+    transform var(--card-dur, 200ms) ease;
+}
+.nc-variant:hover:not(.nc-variant--editing) {
+  border-color: var(--color-brand);
+  transform: translateY(-1px);
+}
+/* Une variante badgée est reléguée, pas cachée : le liseré la signale sans
+   la disqualifier. Trois mots de retouche la remettent souvent en tête. */
+.nc-variant[data-badged="true"] {
+  border-style: dashed;
+}
+.nc-variant--editing {
+  cursor: default;
+  border-color: var(--color-brand);
+}
+.nc-variant-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.nc-variant-slot {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.nc-variant-badge {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-page);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+}
+.nc-variant-text {
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--color-text-primary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-variant { transition: none !important; }
+  .nc-variant:hover { transform: none !important; }
+}
+
 /* ── Barre de réactions (morphose transitions.dev · 20) ─────────────────── */
 /* Le snippet fixe un bouton de 40 px ; le nôtre en fait 38, comme les autres
    boutons ronds de la barre d'actions. Le reste de la morphose est intact. */
