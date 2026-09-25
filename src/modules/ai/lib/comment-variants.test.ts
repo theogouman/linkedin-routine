@@ -157,6 +157,6 @@ describe("cerveau v2", () => {
 
   it("garde l'empreinte attendue", () => {
     const version = createHash("sha256").update(text, "utf8").digest("hex").slice(0, 12);
-    expect(version).toBe("2d8db8748359");
+    expect(version).toBe("15f41c0b1c15");
   });
 });

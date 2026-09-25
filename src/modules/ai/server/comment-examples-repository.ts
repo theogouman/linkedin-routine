@@ -99,12 +99,13 @@ const NEAREST = 20;
  * qu'un service annexe est absent serait disproportionné — et empêcherait
  * d'utiliser le générateur avant d'avoir calculé trois mille embeddings.
  */
-export async function embedText(text: string): Promise<number[] | null> {
-  const trimmed = text.trim();
-  if (trimmed === "") return null;
+export async function embedTexts(texts: string[]): Promise<Array<number[] | null>> {
+  const prepared = texts.map((text) => text.trim().slice(0, 4000));
+  const empty = prepared.map(() => null);
+  if (prepared.length === 0 || prepared.some((text) => text === "")) return empty;
 
   const base = readEnv("SUPABASE_URL");
-  if (!base) return null;
+  if (!base) return empty;
 
   try {
     const response = await fetch(`${base.replace(/\/+$/, "")}/functions/v1/embed`, {
@@ -113,18 +114,28 @@ export async function embedText(text: string): Promise<number[] | null> {
         authorization: `Bearer ${requireEnv("SUPABASE_SERVICE_ROLE_KEY")}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ input: trimmed.slice(0, 4000) }),
-      signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({ input: prepared }),
+      // Généreux parce que le lot d'import envoie soixante-quatre textes d'un
+      // coup ; la génération, elle, n'en envoie qu'un et revient bien avant.
+      signal: AbortSignal.timeout(60_000),
     });
-    if (!response.ok) return null;
+    if (!response.ok) return empty;
     const parsed = (await response.json()) as { embeddings?: unknown };
-    const first = Array.isArray(parsed.embeddings) ? parsed.embeddings[0] : null;
-    return Array.isArray(first) && first.every((value) => typeof value === "number")
-      ? (first as number[])
-      : null;
+    const vectors = Array.isArray(parsed.embeddings) ? parsed.embeddings : [];
+    if (vectors.length !== prepared.length) return empty;
+    return vectors.map((vector) =>
+      Array.isArray(vector) && vector.every((value) => typeof value === "number")
+        ? (vector as number[])
+        : null,
+    );
   } catch {
-    return null;
+    return empty;
   }
+}
+
+export async function embedText(text: string): Promise<number[] | null> {
+  const [vector] = await embedTexts([text]);
+  return vector ?? null;
 }
 
 /**

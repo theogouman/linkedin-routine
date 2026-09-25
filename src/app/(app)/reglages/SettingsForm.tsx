@@ -544,8 +544,7 @@ export function SettingsForm({
           <Row label="Cerveau" value={generator.brainVersion} />
           {generator.corpus === null ? (
             <p style={{ color: "var(--color-brand)" }}>
-              Table <code>comment_examples</code> absente — applique la migration
-              009 puis lance <code>scripts/import-comment-examples.mjs</code>.
+              Corpus injoignable — la migration n&apos;est pas appliquée.
             </p>
           ) : (
             <>
@@ -553,11 +552,17 @@ export function SettingsForm({
                 label="Corpus"
                 value={`${generator.corpus.total} exemples, ${generator.corpus.embedded} avec embedding`}
               />
-              {generator.corpus.embedded === 0 ? (
+              {generator.corpus.total === 0 ? (
                 <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
-                  Sans embedding, le cinquième exemple — celui choisi pour sa
-                  proximité au post — est tiré au hasard. Les quatre autres ne
-                  changent pas.
+                  L&apos;installation tourne toute seule, toutes les dix minutes.
+                  Elle démarre aussi à ta première génération si elle n&apos;est
+                  pas encore passée.
+                </p>
+              ) : generator.corpus.embedded < generator.corpus.total ? (
+                <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+                  Embeddings en cours de calcul. Tant qu&apos;ils manquent, le
+                  cinquième exemple — celui choisi pour sa proximité au post —
+                  est tiré au hasard. Les quatre autres ne changent pas.
                 </p>
               ) : null}
             </>

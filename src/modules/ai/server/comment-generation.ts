@@ -15,11 +15,7 @@ import {
   type CheckedVariante,
 } from "../lib/comment-checks";
 import { selectExamples, type SelectedExample } from "../lib/comment-examples";
-import {
-  buildCommentPrompt,
-  buildReplyPrompt,
-  type Relation,
-} from "../lib/comment-prompt";
+import { buildCommentPrompt, buildReplyPrompt } from "../lib/comment-prompt";
 import {
   countTypos,
   describeIncompleteness,
@@ -30,6 +26,7 @@ import {
   type Intention,
 } from "../lib/comment-variants";
 import { loadBrain } from "./comment-brain";
+import { ensureCorpusSeeded } from "./comment-corpus-seed";
 import { nearestExamples, poolsForSlots } from "./comment-examples-repository";
 
 /**
@@ -89,7 +86,6 @@ export type CommentRequest =
       postBody: string;
       authorName: string | null;
       visuel: string | null;
-      relation?: Relation;
       intention: Intention | null;
     }
   | {
@@ -152,10 +148,19 @@ async function buildUserMessage(
       ? ["reponse_lead_magnet"]
       : [];
 
-  const [bySlot, thematique] = await Promise.all([
+  const [pools, thematique] = await Promise.all([
     poolsForSlots(slots, request.intention, surMonPost),
     nearestExamples(sourceTextFor(request), surMonPost, excluded),
   ]);
+  let bySlot = pools;
+
+  // Filet de la toute première génération : l'ordonnanceur installe le corpus
+  // toutes les dix minutes, mais rien ne garantit qu'il soit déjà passé. On
+  // n'installe que si les viviers sont VIDES — le cas normal ne paie donc rien.
+  if (Object.values(bySlot).every((pool) => pool.length === 0)) {
+    await ensureCorpusSeeded();
+    bySlot = await poolsForSlots(slots, request.intention, surMonPost);
+  }
 
   const examples = selectExamples({
     mode: request.mode,
@@ -168,7 +173,6 @@ async function buildUserMessage(
       ? buildCommentPrompt({
           examples,
           authorName: request.authorName,
-          relation: request.relation ?? "inconnu",
           postBody: request.postBody,
           visuel: request.visuel,
           intention: request.intention,

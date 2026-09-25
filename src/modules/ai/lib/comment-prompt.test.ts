@@ -32,7 +32,6 @@ describe("buildCommentPrompt", () => {
   const base = {
     examples,
     authorName: "Alice Martin",
-    relation: "inconnu" as const,
     postBody: "On a doublé nos RDV en passant à des alertes Notion.",
     visuel: null,
     intention: null,
@@ -57,8 +56,13 @@ describe("buildCommentPrompt", () => {
     );
   });
 
-  it("transmet l'auteur et la relation sur une seule ligne", () => {
-    expect(buildCommentPrompt(base)).toContain("<auteur>Alice Martin | relation: inconnu</auteur>");
+  it("transmet l'auteur, et rien de plus", () => {
+    // La relation (inconnu / connaissance / proche) a été retirée : elle n'est
+    // pas encodable — on peut être proche de X sur un sujet et distant sur un
+    // autre — et le cerveau ne s'en servait que pour autoriser des vannes plus
+    // cash, ce qui n'a jamais été le registre de Théo.
+    expect(buildCommentPrompt(base)).toContain("<auteur>Alice Martin</auteur>");
+    expect(buildCommentPrompt(base)).not.toContain("relation");
   });
 
   it("décrit le visuel quand l'app ne peut pas le montrer", () => {

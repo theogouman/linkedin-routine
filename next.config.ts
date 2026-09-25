@@ -20,7 +20,11 @@ const nextConfig: NextConfig = {
     // process. Sans inclusion explicite, le tracing le laisse hors du bundle
     // et la génération échoue en production sur un fichier introuvable — pas
     // en local, où le disque contient tout le dépôt.
-    "/**": ["./src/modules/ai/assets/**"],
+    // Le cerveau ET le corpus : l'app les porte, et c'est elle qui installe le
+    // second en base. Sans inclusion explicite, le tracing les laisse hors du
+    // bundle et tout échoue en production sur un fichier introuvable — pas en
+    // local, où le disque contient tout le dépôt.
+    "/**": ["./src/modules/ai/assets/**", "./data/**"],
   },
 };
 

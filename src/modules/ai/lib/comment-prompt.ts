@@ -15,7 +15,6 @@
 import { renderExamples, type SelectedExample } from "./comment-examples";
 import type { Intention } from "./comment-variants";
 
-export type Relation = "inconnu" | "connaissance" | "proche";
 export type Langue = "fr" | "en";
 
 /**
@@ -50,7 +49,6 @@ function truncate(value: string): string {
 export interface CommentPromptInput {
   examples: SelectedExample[];
   authorName: string | null;
-  relation: Relation;
   postBody: string;
   /** Décrit le média quand l'app ne peut pas le montrer au modèle. */
   visuel: string | null;
@@ -64,7 +62,7 @@ export function buildCommentPrompt(input: CommentPromptInput): string {
 
   return [
     renderExamples(input.examples),
-    `<auteur>${input.authorName ?? "inconnu"} | relation: ${input.relation}</auteur>`,
+    `<auteur>${input.authorName ?? "inconnu"}</auteur>`,
     `<langue>${langue}</langue>`,
     // Omise quand elle est vide, comme le demande le brief : une balise
     // `<intention></intention>` vide se lit comme une intention, pas comme une
