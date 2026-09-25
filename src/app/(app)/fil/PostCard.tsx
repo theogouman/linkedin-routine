@@ -27,7 +27,6 @@ import { ReactionPicker } from "@/shared/motion/ReactionPicker";
 import { SuccessCheck } from "@/shared/motion/SuccessCheck";
 import { TooltipGroup } from "@/shared/motion/Tooltip";
 import {
-  generateVariantsForPostAction,
   ignorePostAction,
   likePostAction,
   restorePostAction,
@@ -413,7 +412,7 @@ export function PostCard({
         <div className="border-t px-4 py-3" style={{ borderColor: "var(--color-border-default)" }}>
           <VariantComposer
             placeholder="Ton commentaire…"
-            onGenerate={(intention) => generateVariantsForPostAction(post.id, intention)}
+            target={{ kind: "post", id: post.id }}
             onSubmit={(body, origin, from) => submitComment(post.id, body, origin, from)}
             onDone={() => router.refresh()}
           />

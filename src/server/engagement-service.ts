@@ -11,6 +11,7 @@ import { enqueueWriteAction, type EnqueueResult } from "@/modules/engagement/ser
 import {
   generateVariants,
   type CommentGenerationResult,
+  type GenerationHooks,
 } from "@/modules/ai/server/comment-generation";
 import { recordChoice, recordGeneration } from "@/modules/ai/server/comment-journal";
 import type { Intention, Slot } from "@/modules/ai/lib/comment-variants";
@@ -202,6 +203,7 @@ export interface VariantsOutcome extends CommentGenerationResult {
 export async function generateVariantsForPost(
   postId: string,
   intention: Intention | null,
+  hooks?: GenerationHooks,
 ): Promise<VariantsOutcome> {
   const post = await getPost(postId);
   if (!post) throw new Error("Publication introuvable.");
@@ -212,7 +214,7 @@ export async function generateVariantsForPost(
     authorName: post.author_name,
     visuel: describeMedia(post.media_kind),
     intention,
-  });
+  }, hooks);
 
   const generationId = await safeRecord({
     result,
@@ -226,6 +228,7 @@ export async function generateVariantsForPost(
 export async function generateVariantsForComment(
   commentId: string,
   intention: Intention | null,
+  hooks?: GenerationHooks,
 ): Promise<VariantsOutcome> {
   const comment = await getComment(commentId);
   if (!comment) throw new Error("Commentaire introuvable.");
@@ -237,7 +240,7 @@ export async function generateVariantsForComment(
     commenterName: comment.author_name,
     commentBody: comment.body ?? "",
     intention,
-  });
+  }, hooks);
 
   const generationId = await safeRecord({
     result,

@@ -108,6 +108,9 @@ html {
   --color-border-default: #332e2b;
   --nc-nav-active-bg: rgba(255, 255, 255, 0.09);
   --nc-nav-hover-bg: rgba(255, 255, 255, 0.05);
+  --nc-inset-bg: #37322f;
+  --nc-inset-bg-hover: #403a37;
+  --nc-inset-border: rgba(255, 255, 255, 0.10);
   --nc-segmented-active-bg: rgba(255, 255, 255, 0.92);
   --nc-segmented-active-text: #141211;
   --nc-btn-dark-bg: #ede9e6;
@@ -176,6 +179,9 @@ html {
   --nc-duration-slow: 300ms;
   --nc-nav-active-bg: rgba(0, 0, 0, 0.07);
   --nc-nav-hover-bg: rgba(0, 0, 0, 0.04);
+  --nc-inset-bg: #f7f5f4;
+  --nc-inset-bg-hover: #efecea;
+  --nc-inset-border: var(--color-border-default);
   --nc-segmented-active-bg: #ffffff;
   --nc-segmented-active-text: #000000;
   --nc-tile-bg: var(--color-surface-page);
@@ -342,6 +348,18 @@ html {
   border-color: rgba(224, 98, 90, 0.45);
 }
 .nc-btn--sm { height: 36px; padding: 0 14px; font-size: 14px; }
+/* Variante « posée sur une carte » : les commandes du composer et les quatre
+   propositions vivent À L'INTÉRIEUR d'une carte. Transparentes ou au fond de
+   carte, elles se confondaient avec elle en sombre. Un seul token pour les
+   deux, pour qu'un bouton et une proposition se lisent comme la même matière,
+   un cran au-dessus de la carte. */
+.nc-btn--inset {
+  background: var(--nc-inset-bg);
+  color: var(--color-text-primary);
+  border-color: var(--nc-inset-border);
+}
+.nc-btn--inset:hover:not(:disabled) { background: var(--nc-inset-bg-hover); }
+
 
 .nc-icon-btn {
   display: inline-flex;
@@ -1939,9 +1957,9 @@ body.nc-kb-open .nc-nav-pill-bar {
   width: 100%;
   padding: 10px 12px;
   text-align: left;
-  border: 1px solid var(--color-border-default);
+  border: 1px solid var(--nc-inset-border);
   border-radius: var(--nc-radius-xs);
-  background: var(--color-surface-card);
+  background: var(--nc-inset-bg);
   cursor: pointer;
   transition:
     border-color var(--card-dur, 200ms) ease,

@@ -16,6 +16,7 @@ import {
 } from "../lib/comment-checks";
 import { selectExamples, type SelectedExample } from "../lib/comment-examples";
 import { buildCommentPrompt, buildReplyPrompt } from "../lib/comment-prompt";
+import { createVariantExtractor } from "../lib/variant-stream";
 import {
   countTypos,
   describeIncompleteness,
@@ -24,6 +25,7 @@ import {
   type GenerationMode,
   type GenerationPayload,
   type Intention,
+  varianteSchema,
 } from "../lib/comment-variants";
 import { loadBrain } from "./comment-brain";
 import { ensureCorpusSeeded } from "./comment-corpus-seed";
@@ -187,12 +189,30 @@ async function buildUserMessage(
   return { prompt, examples, thematiqueManquant: thematique.length === 0 };
 }
 
+/**
+ * Suivi en direct d'une génération.
+ *
+ * Le modèle met cinq à huit secondes à écrire les quatre variantes, mais la
+ * première est complète bien avant. Ces rappels la rendent dès qu'elle l'est :
+ * le temps total ne change pas, le temps avant de pouvoir lire, si.
+ */
+export interface GenerationHooks {
+  /** Une variante vient d'être refermée par le modèle, contrôles déjà passés. */
+  onVariante?: (variante: CheckedVariante) => void;
+  /** Le premier essai est rejeté : ce qui a été montré doit être effacé. */
+  onRetry?: () => void;
+}
+
 async function callModel(
   brainText: string,
   userMessage: string,
   model: string,
+  onSnapshot: (snapshot: string) => void,
 ): Promise<{ payload: GenerationPayload | null; raw: unknown; usage: CommentUsage; stopReason: string | null }> {
-  const response = await anthropic().messages.parse({
+  // Même requête qu'avant, en flux. `finalMessage()` rend exactement ce que
+  // rendait `parse()` — `parsed_output` compris — donc la validation et le
+  // journal ne voient aucune différence.
+  const stream = anthropic().messages.stream({
     model,
     max_tokens: COMMENT_MAX_TOKENS,
     // Le bloc mis en cache. Rien de variable ici : ni date, ni prénom, ni
@@ -209,6 +229,9 @@ async function callModel(
     // et la rejettent en 400. Le brief demandait de ne pas la mettre au
     // minimum — il n'y a plus de curseur à régler.
   });
+
+  stream.on("text", (_delta, snapshot) => onSnapshot(snapshot));
+  const response = await stream.finalMessage();
 
   const usage: CommentUsage = {
     inputTokens: response.usage.input_tokens,
@@ -227,6 +250,7 @@ async function callModel(
 
 export async function generateVariants(
   request: CommentRequest,
+  hooks: GenerationHooks = {},
 ): Promise<CommentGenerationResult> {
   const startedAt = Date.now();
   const brain = await loadBrain();
@@ -242,14 +266,29 @@ export async function generateVariants(
     cacheCreationTokens: 0,
   };
   let lastProblem = "sortie illisible";
+  const source = sourceTextFor(request);
 
   // Un seul nouvel essai (§7.1), de l'appel ENTIER. Régénérer une variante
   // seule demanderait un second appel avec le contexte complet : au prix d'un
   // appel, autant les quatre.
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (attempt > 0) hooks.onRetry?.();
+
+    // Chaque variante refermée est contrôlée puis poussée aussitôt. Les
+    // contrôles sont des expressions régulières sur UNE variante : les
+    // passer ici plutôt qu'à la fin ne change rien à leur verdict.
+    const extract = createVariantExtractor();
+    const onSnapshot = (snapshot: string) => {
+      if (!hooks.onVariante) return;
+      for (const object of extract(snapshot)) {
+        const parsed = varianteSchema.safeParse(object);
+        if (parsed.success) hooks.onVariante(checkVariante(parsed.data, { source }));
+      }
+    };
+
     let result;
     try {
-      result = await callModel(brain.text, prompt, model);
+      result = await callModel(brain.text, prompt, model, onSnapshot);
     } catch (error) {
       throw translate(error);
     }
@@ -283,7 +322,6 @@ export async function generateVariants(
     );
   }
 
-  const source = sourceTextFor(request);
   const checked = payload.variantes.map((variante) => checkVariante(variante, { source }));
 
   return {

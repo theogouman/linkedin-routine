@@ -91,6 +91,16 @@ export async function poolsForSlots(
 const NEAREST = 20;
 
 /**
+ * Délai accordé à l'embedding pendant une génération.
+ *
+ * Théo attend devant l'écran, et le modèle ne part pas tant que les exemples
+ * ne sont pas choisis. Une fonction Edge qui démarre à froid ne doit pas lui
+ * coûter dix secondes pour le cinquième exemple sur cinq : passé ce délai, on
+ * part sans lui, comme quand les embeddings manquent.
+ */
+const GENERATION_EMBED_TIMEOUT_MS = 3_000;
+
+/**
  * Embedding d'un texte, calculé par la fonction Edge `embed`.
  *
  * Rend `null` plutôt que de lever quand elle n'est pas déployée ou qu'elle
@@ -99,7 +109,10 @@ const NEAREST = 20;
  * qu'un service annexe est absent serait disproportionné — et empêcherait
  * d'utiliser le générateur avant d'avoir calculé trois mille embeddings.
  */
-export async function embedTexts(texts: string[]): Promise<Array<number[] | null>> {
+export async function embedTexts(
+  texts: string[],
+  timeoutMs = 60_000,
+): Promise<Array<number[] | null>> {
   const prepared = texts.map((text) => text.trim().slice(0, 4000));
   const empty = prepared.map(() => null);
   if (prepared.length === 0 || prepared.some((text) => text === "")) return empty;
@@ -115,9 +128,9 @@ export async function embedTexts(texts: string[]): Promise<Array<number[] | null
         "content-type": "application/json",
       },
       body: JSON.stringify({ input: prepared }),
-      // Généreux parce que le lot d'import envoie soixante-quatre textes d'un
-      // coup ; la génération, elle, n'en envoie qu'un et revient bien avant.
-      signal: AbortSignal.timeout(60_000),
+      // Généreux par défaut parce que le lot d'import envoie soixante-quatre
+      // textes d'un coup. La génération, elle, passe un délai court.
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) return empty;
     const parsed = (await response.json()) as { embeddings?: unknown };
@@ -133,8 +146,8 @@ export async function embedTexts(texts: string[]): Promise<Array<number[] | null
   }
 }
 
-export async function embedText(text: string): Promise<number[] | null> {
-  const [vector] = await embedTexts([text]);
+export async function embedText(text: string, timeoutMs?: number): Promise<number[] | null> {
+  const [vector] = await embedTexts([text], timeoutMs);
   return vector ?? null;
 }
 
@@ -149,7 +162,7 @@ export async function nearestExamples(
   surMonPost: boolean,
   excludeCategories: readonly string[] = [],
 ): Promise<ExampleRow[]> {
-  const embedding = await embedText(text);
+  const embedding = await embedText(text, GENERATION_EMBED_TIMEOUT_MS);
   if (embedding === null) return [];
 
   const { data, error } = await db().rpc("match_comment_examples", {

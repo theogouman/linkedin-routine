@@ -14,7 +14,6 @@ import { PanelReveal } from "@/shared/motion/PanelReveal";
 import { SuccessCheck } from "@/shared/motion/SuccessCheck";
 import { TooltipGroup } from "@/shared/motion/Tooltip";
 import {
-  generateVariantsForCommentAction,
   ignoreCommentAction,
   likeCommentAction,
   submitReply,
@@ -182,7 +181,7 @@ export function InboxItem({ comment }: { comment: InboxComment }) {
       >
         <VariantComposer
           placeholder="Ta réponse…"
-          onGenerate={(intention) => generateVariantsForCommentAction(comment.id, intention)}
+          target={{ kind: "comment", id: comment.id }}
           onSubmit={(body, origin, from) => submitReply(comment.id, body, origin, from)}
           onDone={() => {
             setReplyOpen(false);

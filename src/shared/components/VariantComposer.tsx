@@ -8,13 +8,8 @@ import type {
   VarianteView,
   VariantsActionResult,
 } from "@/app/actions";
-import {
-  INTENTIONS,
-  INTENTION_LABELS,
-  SLOT_LABELS,
-  type Intention,
-  type Slot,
-} from "@/modules/ai/lib/comment-variants";
+import { SLOT_LABELS, type Slot } from "@/modules/ai/lib/comment-variants";
+import type { VariantsStreamEvent } from "@/app/api/variants/route";
 import { scheduledLabel } from "@/shared/lib/format";
 import { ErrorMessage, useShake } from "@/shared/motion/ShakeInput";
 import { ThinkingStates } from "@/shared/motion/ThinkingStates";
@@ -35,7 +30,49 @@ import { ThinkingStates } from "@/shared/motion/ThinkingStates";
  *  2. **Une carte badgée est reléguée, jamais masquée.** Le serveur les a déjà
  *     triées. Les cacher obligerait à régénérer — donc à repayer un appel —
  *     pour un défaut que l'œil corrige en deux secondes.
+ *
+ * Les propositions arrivent EN FLUX (route `/api/variants`) : chacune s'affiche
+ * dès que le modèle l'a refermée, puis la liste finale, triée, remplace
+ * l'ordre d'arrivée.
  */
+
+export type GenerationTarget = { kind: "post" | "comment"; id: string };
+
+/** Lit la route en flux et rejoue chaque évènement, ligne par ligne. */
+async function streamVariants(
+  target: GenerationTarget,
+  onEvent: (event: VariantsStreamEvent) => void,
+): Promise<void> {
+  const response = await fetch("/api/variants", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ target: target.kind, id: target.id }),
+  });
+  if (!response.ok || !response.body) {
+    onEvent({
+      type: "error",
+      message:
+        response.status === 401 ? "Session expirée — reconnecte-toi." : "Génération impossible.",
+    });
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (value) buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf("\n");
+    while (newline !== -1) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line !== "") onEvent(JSON.parse(line) as VariantsStreamEvent);
+      newline = buffer.indexOf("\n");
+    }
+    if (done) break;
+  }
+}
 
 const GENERATION_STATES = [
   "Lecture de tes commentaires…",
@@ -45,12 +82,12 @@ const GENERATION_STATES = [
 
 export function VariantComposer({
   placeholder,
-  onGenerate,
+  target,
   onSubmit,
   onDone,
 }: {
   placeholder: string;
-  onGenerate: (intention: Intention | null) => Promise<VariantsActionResult>;
+  target: GenerationTarget;
   onSubmit: (
     body: string,
     origin: "manual" | "ai_edited" | "ai_unchanged",
@@ -58,7 +95,6 @@ export function VariantComposer({
   ) => Promise<EnqueueActionResult>;
   onDone: () => void;
 }) {
-  const [intention, setIntention] = useState<Intention | null>(null);
   const [result, setResult] = useState<VariantsActionResult | null>(null);
   /** Emplacement ouvert en édition, ou `manuel` pour le champ libre. */
   const [editing, setEditing] = useState<Slot | "manuel" | null>(null);
@@ -67,7 +103,7 @@ export function VariantComposer({
   const [original, setOriginal] = useState("");
 
   const shake = useShake();
-  const [generating, startGenerating] = useTransition();
+  const [generating, setGenerating] = useState(false);
   const [submitting, startSubmitting] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -85,27 +121,55 @@ export function VariantComposer({
   }, []);
 
   const generate = () => {
-    startGenerating(async () => {
-      const outcome = await onGenerate(intention);
-      if (!outcome.ok) {
-        toast.error(outcome.message ?? "Génération impossible.");
-        return;
+    if (generating) return;
+    setGenerating(true);
+    setResult({ ok: true, variantes: [] });
+    setEditing(null);
+    setValue("");
+
+    // Les variantes s'accumulent dans l'ordre d'arrivée ; seul `done` fixe la
+    // liste définitive (triée, badgées reléguées) et l'identifiant de journal.
+    const onEvent = (event: VariantsStreamEvent) => {
+      if (event.type === "variante") {
+        setResult((current) => ({
+          ok: true,
+          ...current,
+          variantes: [
+            ...(current?.variantes ?? []).filter((v) => v.slot !== event.variante.slot),
+            event.variante,
+          ],
+        }));
+      } else if (event.type === "retry") {
+        setResult({ ok: true, variantes: [] });
+        setEditing(null);
+        setValue("");
+      } else if (event.type === "done") {
+        const outcome = event.result;
+        setResult(outcome);
+        if (outcome.postExploitable === false) {
+          toast.message(
+            "Post trop pauvre pour réagir à un point précis : seules la réaction et la vanne sont proposées.",
+          );
+        }
+        if (outcome.thematiqueManquant) {
+          toast.message("Exemple thématique absent de cette génération.");
+        }
+        if (outcome.cacheWarning) {
+          toast.warning("Cache non lu sur cet appel : quelque chose de variable est passé en system.");
+        }
+      } else {
+        setResult(null);
+        setEditing(null);
+        toast.error(event.message);
       }
-      setResult(outcome);
-      setEditing(null);
-      setValue("");
-      if (outcome.postExploitable === false) {
-        toast.message(
-          "Post trop pauvre pour réagir à un point précis : seules la réaction et la vanne sont proposées.",
-        );
-      }
-      if (outcome.thematiqueManquant) {
-        toast.message("Exemple thématique absent — les embeddings ne sont pas encore calculés.");
-      }
-      if (outcome.cacheWarning) {
-        toast.warning("Cache non lu sur cet appel : quelque chose de variable est passé en system.");
-      }
-    });
+    };
+
+    streamVariants(target, onEvent)
+      .catch(() => {
+        setResult(null);
+        toast.error("Connexion interrompue pendant la génération.");
+      })
+      .finally(() => setGenerating(false));
   };
 
   const open = (variante: VarianteView) => {
@@ -160,25 +224,6 @@ export function VariantComposer({
 
   return (
     <div className={shake.wrapClassName}>
-      {/* Sélecteur d'intention : facultatif, un tap, et il survit à la
-          génération pour qu'une régénération garde la même orientation. */}
-      {variantes.length === 0 && editing === null ? (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {INTENTIONS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setIntention((current) => (current === value ? null : value))}
-              aria-pressed={intention === value}
-              className="nc-btn nc-btn--surface nc-btn--sm"
-              data-active={intention === value}
-            >
-              {INTENTION_LABELS[value]}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       {/* Les propositions. Celle qu'on touche s'ouvre en place. */}
       <div className="flex flex-col gap-2">
         {variantes.map((variante) =>
@@ -234,7 +279,7 @@ export function VariantComposer({
             type="button"
             onClick={generate}
             disabled={generating || submitting}
-            className="nc-btn nc-btn--ghost nc-btn--sm"
+            className="nc-btn nc-btn--inset nc-btn--sm"
           >
             {variantes.length === 0 ? (
               <Sparkles size={15} aria-hidden />
@@ -254,7 +299,7 @@ export function VariantComposer({
             type="button"
             onClick={openManual}
             disabled={generating || submitting}
-            className="nc-btn nc-btn--ghost nc-btn--sm"
+            className="nc-btn nc-btn--inset nc-btn--sm"
           >
             <PenLine size={15} aria-hidden />
             Écrire à la main

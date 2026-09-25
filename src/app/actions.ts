@@ -32,12 +32,8 @@ import {
   restorePost,
 } from "@/server/engagement-service";
 import { enrichProfiles, restartIngestion, synchronize } from "@/server/sync-service";
-import {
-  generateVariantsForComment,
-  generateVariantsForPost,
-} from "@/server/engagement-service";
-import type { Badge } from "@/modules/ai/lib/comment-checks";
-import { asIntention, type Slot } from "@/modules/ai/lib/comment-variants";
+import type { VarianteView } from "@/modules/ai/lib/variant-view";
+import type { Slot } from "@/modules/ai/lib/comment-variants";
 import { saveGenerationSettings } from "@/modules/ai/server/generate";
 import type { Effort } from "@/modules/ai/lib/model";
 
@@ -529,20 +525,7 @@ export async function savePolicyAction(patch: {
 }
 
 // ── Générateur de quatre variantes ─────────────────────────────────────────
-/**
- * Forme sérialisable d'une variante, telle qu'elle traverse la frontière
- * serveur → client. Les expressions régulières et les objets d'erreur restent
- * côté serveur ; ce qui passe est ce qui s'affiche.
- */
-export interface VarianteView {
-  slot: Slot;
-  texte: string;
-  extraitPost: string;
-  faitUtilise: string | null;
-  positionUtilisee: string | null;
-  coquille: boolean;
-  badges: Badge[];
-}
+export type { VarianteView } from "@/modules/ai/lib/variant-view";
 
 export interface VariantsActionResult extends ActionResult {
   generationId?: string | null;
@@ -552,45 +535,4 @@ export interface VariantsActionResult extends ActionResult {
   thematiqueManquant?: boolean;
   /** Lecture de cache nulle hors premier appel — quelque chose varie en system. */
   cacheWarning?: boolean;
-}
-
-function toView(result: Awaited<ReturnType<typeof generateVariantsForPost>>): VariantsActionResult {
-  return {
-    ok: true,
-    generationId: result.generationId,
-    postExploitable: result.postExploitable,
-    thematiqueManquant: result.thematiqueManquant,
-    cacheWarning: result.cacheWarning,
-    variantes: result.variantes.map((variante) => ({
-      slot: variante.slot,
-      texte: variante.texte,
-      extraitPost: variante.extrait_post,
-      faitUtilise: variante.fait_utilise,
-      positionUtilisee: variante.position_utilisee,
-      coquille: variante.coquille,
-      badges: variante.badges,
-    })),
-  };
-}
-
-export async function generateVariantsForPostAction(
-  postId: string,
-  intention?: string | null,
-): Promise<VariantsActionResult> {
-  try {
-    return toView(await generateVariantsForPost(postId, asIntention(intention)));
-  } catch (error) {
-    return fail(error);
-  }
-}
-
-export async function generateVariantsForCommentAction(
-  commentId: string,
-  intention?: string | null,
-): Promise<VariantsActionResult> {
-  try {
-    return toView(await generateVariantsForComment(commentId, asIntention(intention)));
-  } catch (error) {
-    return fail(error);
-  }
 }
