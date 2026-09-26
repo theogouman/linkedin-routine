@@ -515,3 +515,64 @@ describe("runSync — date de départ", () => {
     expect(asked).toEqual(start);
   });
 });
+
+describe("runSync — borne du jour", () => {
+  const LUNDI_MINUIT = new Date("2026-03-16T00:00:00Z");
+
+  it("transmet la borne du jour au fournisseur pour les publications", async () => {
+    let asked: Date | null = null;
+    const rec = recorder([ALICE], {
+      readAllCursors: async () =>
+        new Map([[postsCursorKey(ALICE.id), { lastSyncedAt: new Date("2026-03-13T18:00:00Z") }]]),
+    });
+    const fake = new FakeIngestionProvider({});
+    const provider: IngestionProvider = {
+      name: fake.name,
+      fetchPostsForProfile: async (request) => {
+        asked = request.since;
+        return { state: "ok", posts: [] };
+      },
+      fetchCommentsForPosts: (request) => fake.fetchCommentsForPosts(request),
+    };
+
+    await runSync(provider, rec.ports, {
+      ...OPTIONS,
+      now: new Date("2026-03-16T09:00:00Z"),
+      scope: "posts",
+      dayFloor: LUNDI_MINUIT,
+    });
+
+    expect(asked).toEqual(LUNDI_MINUIT);
+  });
+
+  it("ne l'applique PAS aux commentaires reçus", async () => {
+    // Quelqu'un qui commente un dimanche mérite une réponse le lundi. Un post
+    // du dimanche, lui, est du bruit pour une routine qui ne tourne pas le
+    // week-end. Les deux fenêtres ne disent pas la même chose.
+    let asked: Date | null = null;
+    const rec = recorder([ALICE], {
+      listOwnPosts: async () => [
+        { id: "own-1", providerPostId: "u1", postUrl: "https://www.linkedin.com/feed/update/u1" },
+      ],
+    });
+    const fake = new FakeIngestionProvider({});
+    const provider: IngestionProvider = {
+      name: fake.name,
+      fetchPostsForProfile: (request) => fake.fetchPostsForProfile(request),
+      fetchCommentsForPosts: async (request) => {
+        asked = request.since;
+        return { state: "ok", comments: [] };
+      },
+    };
+
+    await runSync(provider, rec.ports, {
+      ...OPTIONS,
+      now: new Date("2026-03-16T09:00:00Z"),
+      scope: "comments",
+      dayFloor: LUNDI_MINUIT,
+    });
+
+    expect(asked).not.toBeNull();
+    expect(asked!.getTime()).toBeLessThan(LUNDI_MINUIT.getTime());
+  });
+});

@@ -40,6 +40,20 @@ export interface FetchWindowOptions {
    * voulu voir.
    */
   startDate?: Date | null;
+  /**
+   * Minuit du jour courant, en heure locale.
+   *
+   * Sert à ne demander QUE les publications du jour. Le curseur, lui, remonte
+   * à la dernière récupération réussie : sans cette borne, un lundi matin
+   * rapatrie le samedi et le dimanche — deux jours où l'utilisateur n'a pas
+   * interagi et n'a pas l'intention de le faire.
+   *
+   * Conséquence assumée : une publication parue APRÈS la dernière
+   * actualisation d'un jour donné ne sera jamais récupérée, puisque le
+   * lendemain elle n'est plus « du jour ». C'est le sens de la demande, pas un
+   * effet de bord.
+   */
+  dayFloor?: Date | null;
 }
 
 export interface FetchWindow {
@@ -60,13 +74,21 @@ export function computeFetchWindow(
   const { now, initialBackfillDays, maxLookbackDays } = options;
   const overlapMs = (options.overlapMinutes ?? 10) * 60_000;
   const floor = new Date(now.getTime() - maxLookbackDays * DAY_MS);
-  const start = options.startDate ?? null;
+  // Les deux bornes volontaires se combinent en une seule : la plus tardive
+  // gagne. Elles disent la même chose — « rien avant ça » — pour des raisons
+  // différentes, l'une fixe, l'autre glissante.
+  const deliberate = [options.startDate, options.dayFloor]
+    .filter((date): date is Date => date instanceof Date)
+    .reduce<Date | null>(
+      (latest, date) => (latest === null || date.getTime() > latest.getTime() ? date : latest),
+      null,
+    );
 
-  // La date de départ s'applique APRÈS toutes les autres bornes, et ne marque
-  // jamais la fenêtre comme tronquée : `truncated` signale du contenu manqué
-  // malgré nous, alors qu'ici on a décidé de ne pas le vouloir.
+  // Elles s'appliquent APRÈS toutes les autres bornes, et ne marquent jamais
+  // la fenêtre comme tronquée : `truncated` signale du contenu manqué malgré
+  // nous, alors qu'ici on a décidé de ne pas le vouloir.
   const clamp = (since: Date): Date =>
-    start !== null && since.getTime() < start.getTime() ? start : since;
+    deliberate !== null && since.getTime() < deliberate.getTime() ? deliberate : since;
 
   if (cursor.lastSyncedAt === null) {
     const backfill = new Date(now.getTime() - initialBackfillDays * DAY_MS);

@@ -207,9 +207,15 @@ export async function synchronize(
 
   try {
     const startDate = await readIngestionStart();
+    const now = new Date();
     const report = await runSync(getIngestionProvider(), buildPorts(), {
-      now: new Date(),
+      now,
       startDate,
+      // Seules les publications DU JOUR. Sans cette borne, une actualisation du
+      // lundi matin rapatrie le samedi et le dimanche : deux jours que
+      // l'utilisateur a délibérément sautés, et qu'il n'a aucune intention de
+      // traiter. Le curseur, lui, ne sait que « depuis la dernière fois ».
+      dayFloor: startOfToday(now),
       initialBackfillDays: INITIAL_BACKFILL_DAYS,
       maxLookbackDays: MAX_LOOKBACK_DAYS,
       receivedCommentsWindowDays: RECEIVED_COMMENTS_WINDOW_DAYS,

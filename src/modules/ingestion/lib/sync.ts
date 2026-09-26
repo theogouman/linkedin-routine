@@ -78,6 +78,15 @@ export interface SyncOptions {
    * `null` = pas de borne, comportement historique.
    */
   startDate?: Date | null;
+  /**
+   * Minuit du jour courant, en heure locale de l'app.
+   *
+   * Ne s'applique QU'AUX publications. Les commentaires reçus sous les posts de
+   * l'utilisateur gardent leur fenêtre glissante : quelqu'un qui commente un
+   * dimanche mérite une réponse le lundi, alors qu'un post du dimanche est du
+   * bruit pour une routine qui ne tourne pas le week-end.
+   */
+  dayFloor?: Date | null;
   /** `posts` seul, `comments` seul, ou les deux. */
   scope?: "all" | "posts" | "comments";
   /**
@@ -190,6 +199,7 @@ async function syncPosts(
       initialBackfillDays: options.initialBackfillDays,
       maxLookbackDays: options.maxLookbackDays,
       startDate: options.startDate ?? null,
+      dayFloor: options.dayFloor ?? null,
     });
     if (window.truncated) report.truncated.push(account.profileUrl);
 

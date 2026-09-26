@@ -514,6 +514,14 @@ export function SettingsForm({
             précédente.
           </p>
           <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+            Le fil ne récupère que les publications <strong>du jour</strong>. Une
+            actualisation du lundi matin ne rapatrie pas le samedi ni le
+            dimanche. Revers de la médaille : une publication parue après ta
+            dernière actualisation d&apos;un jour donné ne sera pas récupérée le
+            lendemain. Les commentaires reçus sous tes posts, eux, gardent leur
+            fenêtre de 30 jours.
+          </p>
+          <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
             Aucune publication n&apos;est supprimée : celles déjà au fil restent,
             avec leur statut.
           </p>

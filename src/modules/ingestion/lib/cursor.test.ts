@@ -187,3 +187,76 @@ describe("computeFetchWindow — date de départ", () => {
     expect(toPostedLimit(window.since, NOW)).toBe("24h");
   });
 });
+
+describe("computeFetchWindow — publications du jour uniquement", () => {
+  // Lundi 9 h. Le curseur date du vendredi : sans borne, on rapatrierait le
+  // week-end entier.
+  const LUNDI_9H = new Date("2026-03-16T09:00:00Z");
+  const LUNDI_MINUIT = new Date("2026-03-16T00:00:00Z");
+  const VENDREDI = new Date("2026-03-13T18:00:00Z");
+  const BASE_LUNDI = { now: LUNDI_9H, initialBackfillDays: 7, maxLookbackDays: 90 };
+
+  it("remonte un curseur du vendredi à minuit du jour même", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: VENDREDI },
+      { ...BASE_LUNDI, dayFloor: LUNDI_MINUIT },
+    );
+    expect(window.since.toISOString()).toBe(LUNDI_MINUIT.toISOString());
+  });
+
+  it("ne marque pas la fenêtre comme tronquée : c'est un choix, pas une perte", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: VENDREDI },
+      { ...BASE_LUNDI, dayFloor: LUNDI_MINUIT },
+    );
+    expect(window.truncated).toBe(false);
+  });
+
+  it("laisse intact un curseur du jour même", () => {
+    // Deuxième actualisation de la journée : on repart de la première, pas de
+    // minuit — sinon on redemanderait ce qu'on a déjà.
+    const window = computeFetchWindow(
+      { lastSyncedAt: new Date("2026-03-16T08:00:00Z") },
+      { ...BASE_LUNDI, dayFloor: LUNDI_MINUIT },
+    );
+    expect(window.since.toISOString()).toBe("2026-03-16T07:50:00.000Z");
+  });
+
+  it("borne aussi l'amorçage d'un compte neuf", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: null },
+      { ...BASE_LUNDI, dayFloor: LUNDI_MINUIT },
+    );
+    expect(window.isInitial).toBe(true);
+    expect(window.since.toISOString()).toBe(LUNDI_MINUIT.toISOString());
+  });
+
+  it("la plus tardive des deux bornes volontaires gagne", () => {
+    // Date de départ ancienne, borne du jour récente → c'est le jour qui prime.
+    const jour = computeFetchWindow(
+      { lastSyncedAt: VENDREDI },
+      { ...BASE_LUNDI, startDate: new Date("2026-01-01T00:00:00Z"), dayFloor: LUNDI_MINUIT },
+    );
+    expect(jour.since.toISOString()).toBe(LUNDI_MINUIT.toISOString());
+
+    // Et l'inverse : une date de départ postérieure à minuit l'emporte.
+    const depart = computeFetchWindow(
+      { lastSyncedAt: VENDREDI },
+      { ...BASE_LUNDI, startDate: new Date("2026-03-16T06:00:00Z"), dayFloor: LUNDI_MINUIT },
+    );
+    expect(depart.since.toISOString()).toBe("2026-03-16T06:00:00.000Z");
+  });
+
+  it("fait tomber le filtre de l'actor sur 24h, le moins cher", () => {
+    const window = computeFetchWindow(
+      { lastSyncedAt: VENDREDI },
+      { ...BASE_LUNDI, dayFloor: LUNDI_MINUIT },
+    );
+    expect(toPostedLimit(window.since, LUNDI_9H)).toBe("24h");
+  });
+
+  it("sans borne du jour, le comportement d'origine est intact", () => {
+    const window = computeFetchWindow({ lastSyncedAt: VENDREDI }, BASE_LUNDI);
+    expect(window.since.toISOString()).toBe("2026-03-13T17:50:00.000Z");
+  });
+});
