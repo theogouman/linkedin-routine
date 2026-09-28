@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { normalizeProfileUrl, parseBulkProfileUrls } from "./linkedin-url";
+import {
+  activityIdFromPostUrl,
+  normalizeProfileUrl,
+  parseBulkProfileUrls,
+  resolvePublishablePostId,
+} from "./linkedin-url";
 
 function expectUrl(input: string, expected: string) {
   const result = normalizeProfileUrl(input);
@@ -141,5 +146,57 @@ describe("parseBulkProfileUrls", () => {
     expect(parseBulkProfileUrls("   \n  ")).toEqual({
       accepted: [], rejected: [], duplicates: [],
     });
+  });
+});
+
+describe("identifiant de publication", () => {
+  it("lit l'activité dans une URL de post", () => {
+    expect(
+      activityIdFromPostUrl(
+        "https://www.linkedin.com/posts/sylviestevanovic_jai-un-grand-activity-7510228384908582912-fWDj",
+      ),
+    ).toBe("7510228384908582912");
+  });
+
+  it("lit l'activité dans une URL de flux", () => {
+    expect(
+      activityIdFromPostUrl("https://www.linkedin.com/feed/update/urn:li:activity:7510231136959090688/"),
+    ).toBe("7510231136959090688");
+  });
+
+  // Un ugcPost désigne le contenu source, pas la publication commentable :
+  // le confondre avec l'activité est précisément ce qui produit un 422.
+  it("ignore une URL de partage", () => {
+    expect(
+      activityIdFromPostUrl("https://www.linkedin.com/feed/update/urn:li:ugcPost:7508162674325757953"),
+    ).toBeNull();
+  });
+
+  it("rend null sans URL", () => {
+    expect(activityIdFromPostUrl(null)).toBeNull();
+    expect(activityIdFromPostUrl("")).toBeNull();
+  });
+
+  // Le cas réel qui a produit le 422 : la colonne garde l'identifiant écrit
+  // au scrape, l'URL porte celui que LinkedIn sert aujourd'hui.
+  it("préfère l'identifiant de l'URL quand la colonne a vieilli", () => {
+    expect(
+      resolvePublishablePostId({
+        providerPostId: "7510231136959090688",
+        postUrl: "https://www.linkedin.com/posts/activity-7510228384908582912-8m3t",
+      }),
+    ).toBe("7510228384908582912");
+  });
+
+  it("garde la colonne quand l'URL n'apprend rien", () => {
+    expect(
+      resolvePublishablePostId({
+        providerPostId: "7509288204005732353",
+        postUrl: "https://www.linkedin.com/feed/update/urn:li:ugcPost:7508162674325757953",
+      }),
+    ).toBe("7509288204005732353");
+    expect(resolvePublishablePostId({ providerPostId: "123456789012", postUrl: null })).toBe(
+      "123456789012",
+    );
   });
 });

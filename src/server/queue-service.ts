@@ -12,6 +12,7 @@ import {
   setCommentLiked,
 } from "@/modules/inbox/server/repository";
 import { drainQueue, type DrainReport, type QueuePorts } from "@/modules/engagement/server/queue";
+import { resolvePublishablePostId } from "@/shared/lib/linkedin-url";
 import { notifyQueueSuspended } from "@/modules/notifications/server/push";
 
 /**
@@ -30,14 +31,23 @@ const ports: QueuePorts = {
       const post = await getPost(comment.post_id);
       if (!post) return null;
       return {
-        providerPostId: post.provider_post_id,
+        providerPostId: resolvePublishablePostId({
+          providerPostId: post.provider_post_id,
+          postUrl: post.post_url,
+        }),
         providerCommentId: comment.provider_comment_id,
       };
     }
     if (!action.target_post_id) return null;
     const post = await getPost(action.target_post_id);
     if (!post) return null;
-    return { providerPostId: post.provider_post_id, providerCommentId: null };
+    return {
+      providerPostId: resolvePublishablePostId({
+        providerPostId: post.provider_post_id,
+        postUrl: post.post_url,
+      }),
+      providerCommentId: null,
+    };
   },
 
   onSent: async (action: WriteActionRow) => {

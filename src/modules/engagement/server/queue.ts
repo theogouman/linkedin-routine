@@ -264,10 +264,30 @@ async function sendClaimedAction(
       return { kind: "suspended", reason: restriction.reason };
     }
 
-    const message = failure.message ?? "Échec inconnu.";
-    await markActionFailed(action.id, message);
+    const message = explainFailure(failure);
+    await markActionFailed(action.id, message, failure.body);
     return { kind: "failed", message };
   }
+}
+
+/**
+ * Traduit un refus du fournisseur en phrase qui dit quoi faire.
+ *
+ * Un 422 sur une publication ne vient presque jamais du texte : LinkedIn
+ * re-clé une publication quand son auteur la modifie, et l'identifiant gardé
+ * en base au moment du scrape cesse d'exister. La file envoie désormais
+ * l'identifiant lu dans l'URL, plus frais — mais quand l'URL elle-même a
+ * vieilli, le refus revient, et « 422 » seul n'apprend rien à personne.
+ */
+function explainFailure(failure: { status?: number; message?: string; body?: unknown }): string {
+  if (failure.status === 422) {
+    return (
+      "LinkedIn a refusé la cible : la publication a été modifiée ou supprimée " +
+      "depuis la dernière actualisation, et son identifiant n'existe plus. " +
+      "Actualise le fil, puis réessaie."
+    );
+  }
+  return failure.message ?? "Échec inconnu.";
 }
 
 export class QueueSuspendedError extends Error {

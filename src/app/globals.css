@@ -19,6 +19,31 @@ html {
   background-color: var(--color-surface-page);
 }
 
+/* La page ne dépasse jamais la largeur de l'écran.
+   Sur téléphone, un seul élément trop large — une URL sans espace dans un
+   post, une image mal bornée — rend TOUTE la page déplaçable latéralement :
+   on ne voit pas le coupable, on sent juste que l'app « a du jeu » et on
+   perd l'alignement en scrollant. `clip` plutôt que `hidden` parce que
+   `hidden` ferait de html/body un conteneur de défilement, ce qui casserait
+   les positionnements collés et le rebond iOS. `overscroll-behavior-x`
+   coupe en plus le geste de navigation arrière déclenché par un glissement
+   horizontal sur le bord. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
+/* Le verrou ci-dessus masque le débordement ; celui-ci en supprime la cause
+   la plus fréquente. `whitespace-pre-wrap` conserve les retours à la ligne
+   de l'auteur mais ne coupe qu'aux espaces : une URL de deux cents
+   caractères reste un mot unique et pousse la carte hors de l'écran. */
+.nc-selectable,
+.nc-variant-text {
+  overflow-wrap: anywhere;
+}
+
 ::selection {
   background: rgba(224, 98, 90, 0.24);
   color: inherit;

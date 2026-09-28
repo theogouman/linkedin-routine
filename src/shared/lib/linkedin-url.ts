@@ -167,3 +167,46 @@ export const REJECTION_LABELS: Record<ProfileUrlRejection, string> = {
   not_a_profile: "URL LinkedIn sans segment /in/ (page entreprise ou post ?)",
   missing_identifier: "identifiant de profil absent ou invalide",
 };
+
+// ── Identifiant d'une publication ──────────────────────────────────────────
+
+/**
+ * Identifiant d'activité contenu dans l'URL d'une publication.
+ *
+ * Deux formes circulent, et les deux arrivent du scraper :
+ *   `…/posts/<slug>_<texte>-activity-7510228384908582912-fWDj`
+ *   `…/feed/update/urn:li:activity:7510228384908582912/`
+ *
+ * Rend `null` pour une URL de partage (`urn:li:ugcPost:…`, `urn:li:share:…`) :
+ * ces identifiants désignent le contenu source, pas la publication sur
+ * laquelle on commente, et les confondre produit exactement le 422 que cette
+ * fonction sert à éviter.
+ */
+export function activityIdFromPostUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const match =
+    /activity[-:](\d{6,})/i.exec(url) ?? /urn:li:activity:(\d{6,})/i.exec(url);
+  return match?.[1] ?? null;
+}
+
+/**
+ * L'identifiant à envoyer au fournisseur d'écriture.
+ *
+ * L'URL prime sur l'identifiant stocké, et ce n'est pas arbitraire : LinkedIn
+ * RE-CLÉ une publication quand son auteur la modifie. L'ancien numéro cesse
+ * alors d'exister, mais il reste en base parce qu'on l'a écrit au moment du
+ * scrape et qu'on ne le revalide jamais. Un commentaire parti sur cet ancien
+ * numéro revient en 422, sans indice — c'est arrivé sur un post dont l'URL
+ * portait déjà `activity-7510228384908582912` alors que la colonne gardait
+ * `7510231136959090688`.
+ *
+ * L'URL est la source la plus fraîche dont on dispose : elle est réécrite à
+ * chaque actualisation du fil. À défaut d'URL exploitable, on garde la
+ * colonne — sans identifiant du tout, il n'y a rien à envoyer.
+ */
+export function resolvePublishablePostId(post: {
+  providerPostId: string;
+  postUrl?: string | null;
+}): string {
+  return activityIdFromPostUrl(post.postUrl) ?? post.providerPostId;
+}

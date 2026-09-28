@@ -157,13 +157,26 @@ export async function markActionSent(
   if (error) throw new Error(`Enregistrement de l'envoi : ${error.message}`);
 }
 
+/**
+ * Le corps de la réponse est conservé avec l'échec.
+ *
+ * Sans lui, le journal ne disait que « Unipile a répondu 422 » — un code sans
+ * cause, qui a coûté un aller-retour dans la base et deux appels au scraper
+ * pour comprendre qu'un identifiant de publication avait changé. Le détail
+ * du fournisseur est la seule pièce qui explique un refus ; on l'écrit.
+ */
 export async function markActionFailed(
   actionId: string,
   reason: string,
+  providerBody?: unknown,
 ): Promise<void> {
   const { error } = await db()
     .from("write_actions")
-    .update({ status: "failed", error: reason.slice(0, 2000) })
+    .update({
+      status: "failed",
+      error: reason.slice(0, 2000),
+      ...(providerBody === undefined ? {} : { provider_result: providerBody }),
+    })
     .eq("id", actionId);
   if (error) throw new Error(`Enregistrement de l'échec : ${error.message}`);
 }
