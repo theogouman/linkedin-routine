@@ -66,6 +66,14 @@ par tes règles réelles et commiter suffit, aucun redéploiement n'est
 nécessaire. Tant qu'ils portent le marqueur `**Placeholder.**`, l'app le
 signale dans les réglages et au moment de chaque génération.
 
+## Extension Chrome
+
+`extension/` contient une extension Manifest V3 qui pose un bouton **Proposer**
+sur chaque publication de `linkedin.com` et rend les quatre mêmes variantes,
+générées par cette app. Elle lit le texte affiché dans la page : ni Apify pour
+récupérer les posts, ni Unipile pour publier — c'est toi qui appuies sur
+« Publier ». Installation et dépannage : `extension/README.md`.
+
 ## Pile
 
 Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind 4 ·

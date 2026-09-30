@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Routine LinkedIn — commentaires",
+  "version": "1.0.0",
+  "description": "Quatre propositions de commentaire dans ta voix, sur chaque publication LinkedIn. Rien n'est publié sans toi.",
+  "permissions": ["storage"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/*", "https://linkedin.com/*"],
+      "js": ["src/extract.js", "src/panel.js", "src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "Routine LinkedIn — réglages"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

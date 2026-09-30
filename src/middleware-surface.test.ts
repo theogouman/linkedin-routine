@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 /**
  * La production est joignable publiquement (protection Vercel en preview
@@ -21,14 +21,17 @@ describe("surface publique du middleware", () => {
       ["/login", "/manifest.webmanifest", "/offline", "/sw.js"],
     );
     expect(listOf("PUBLIC_PREFIXES").sort()).toEqual(
-      ["/_next/", "/api/cron/", "/icons/"],
+      ["/_next/", "/api/cron/", "/api/extension/", "/icons/"],
     );
   });
 
   it("n'ouvre aucun préfixe sans route derrière", () => {
-    // /api/cron/ est le seul préfixe d'API public ; il doit correspondre à des
-    // routes réelles, elles-mêmes protégées par CRON_SECRET.
+    // Les deux préfixes d'API publics correspondent à des routes réelles, qui
+    // portent chacune leur propre secret : CRON_SECRET d'un côté,
+    // EXTENSION_TOKEN de l'autre. Aucune n'est ouverte.
     const apiPrefixes = listOf("PUBLIC_PREFIXES").filter((p) => p.startsWith("/api/"));
-    expect(apiPrefixes).toEqual(["/api/cron/"]);
+    expect(apiPrefixes.sort()).toEqual(["/api/cron/", "/api/extension/"]);
+    expect(existsSync("src/app/api/cron/_auth.ts")).toBe(true);
+    expect(existsSync("src/app/api/extension/_auth.ts")).toBe(true);
   });
 });

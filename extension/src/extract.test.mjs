@@ -1,0 +1,198 @@
+import { beforeAll, describe, expect, it } from "vitest";
+
+/**
+ * Le fichier est un script de contenu, pas un module : il s'installe sur
+ * `globalThis`. On l'importe tel quel, ce qui vérifie au passage qu'il ne
+ * touche pas au DOM à l'import — condition pour qu'il se charge dans un
+ * service worker de test comme dans une page.
+ */
+let LR;
+beforeAll(async () => {
+  await import("./extract.js");
+  LR = globalThis.LRExtract;
+});
+
+/**
+ * Élément factice minimal.
+ *
+ * Il ne cherche pas à imiter le DOM de LinkedIn — inventer un balisage pour le
+ * faire correspondre à mes propres sélecteurs ne prouverait rien. Ce qu'il
+ * teste est la logique autour : l'ORDRE des listes de sélecteurs, le
+ * dédoublonnage, le traitement du repartage.
+ */
+function fake({ selectors = {}, attrs = {}, text = null, children = [] } = {}) {
+  const node = {
+    _selectors: selectors,
+    _attrs: attrs,
+    innerText: text ?? undefined,
+    textContent: text ?? "",
+    children,
+    getAttribute: (name) => attrs[name] ?? null,
+    querySelector(selector) {
+      const found = selectors[selector];
+      return Array.isArray(found) ? (found[0] ?? null) : (found ?? null);
+    },
+    querySelectorAll(selector) {
+      const found = selectors[selector];
+      if (!found) return [];
+      return Array.isArray(found) ? found : [found];
+    },
+    contains: (other) => children.includes(other),
+    matches: () => false,
+  };
+  return node;
+}
+
+describe("cleanPostText", () => {
+  it("retire le « voir plus » du repli", () => {
+    expect(LR.cleanPostText("Un texte qui continue…voir plus")).toBe("Un texte qui continue");
+    expect(LR.cleanPostText("Un texte qui continue... see more")).toBe("Un texte qui continue");
+    expect(LR.cleanPostText("Un texte…  afficher plus")).toBe("Un texte");
+    expect(LR.cleanPostText("Un texte\nvoir moins")).toBe("Un texte");
+  });
+
+  it("ne mange pas des points de suspension au milieu", () => {
+    expect(LR.cleanPostText("Alors là… franchement, bravo.")).toBe("Alors là… franchement, bravo.");
+  });
+
+  it("supprime le mot `hashtag` inséré pour les lecteurs d'écran", () => {
+    expect(LR.cleanPostText("Merci hashtag#nocode et hashtag #notion")).toBe(
+      "Merci #nocode et #notion",
+    );
+  });
+
+  it("normalise les espaces sans écraser les paragraphes", () => {
+    expect(LR.cleanPostText("Ligne un\n\n\n\nLigne deux")).toBe("Ligne un\n\nLigne deux");
+    expect(LR.cleanPostText("Deux espaces   ici")).toBe("Deux espaces ici");
+    expect(LR.cleanPostText("  \n bord  \n ")).toBe("bord");
+  });
+
+  it("rend une chaîne vide plutôt que de lever sur une entrée absente", () => {
+    expect(LR.cleanPostText(null)).toBe("");
+    expect(LR.cleanPostText(undefined)).toBe("");
+    expect(LR.cleanPostText(42)).toBe("");
+  });
+});
+
+describe("activityId", () => {
+  it("lit l'identifiant sur chacun des attributs connus", () => {
+    expect(LR.activityId(fake({ attrs: { "data-urn": "urn:li:activity:7510228384908582912" } }))).toBe(
+      "7510228384908582912",
+    );
+    expect(LR.activityId(fake({ attrs: { "data-id": "urn:li:activity:123456789" } }))).toBe(
+      "123456789",
+    );
+  });
+
+  it("accepte les autres formes d'urn servies par LinkedIn", () => {
+    expect(LR.activityId(fake({ attrs: { "data-urn": "urn:li:ugcPost:998877665544" } }))).toBe(
+      "998877665544",
+    );
+  });
+
+  it("rend null plutôt que de lever quand rien ne correspond", () => {
+    expect(LR.activityId(fake({ attrs: { "data-urn": "urn:li:fsd_profile:abc" } }))).toBeNull();
+    expect(LR.activityId(null)).toBeNull();
+    expect(LR.activityId({})).toBeNull();
+  });
+
+  it("reconstruit un lien exploitable", () => {
+    expect(LR.postUrl("123456789")).toBe(
+      "https://www.linkedin.com/feed/update/urn:li:activity:123456789/",
+    );
+    expect(LR.postUrl(null)).toBeNull();
+  });
+});
+
+describe("detectMedia", () => {
+  it("classe la vidéo avant l'image, qui n'est que sa vignette", () => {
+    const post = fake({
+      selectors: { video: fake(), ".update-components-image": fake() },
+    });
+    expect(LR.detectMedia(post)).toBe("video");
+  });
+
+  it("classe le carrousel avant l'image", () => {
+    const post = fake({
+      selectors: { ".update-components-document": fake(), ".update-components-image": fake() },
+    });
+    expect(LR.detectMedia(post)).toBe("document");
+  });
+
+  it("rend `none` quand rien n'accompagne le texte", () => {
+    expect(LR.detectMedia(fake())).toBe("none");
+  });
+});
+
+describe("extractPost", () => {
+  it("relève auteur, texte, média et lien", () => {
+    const post = fake({
+      attrs: { "data-urn": "urn:li:activity:123456789" },
+      selectors: {
+        '.update-components-actor__title span[aria-hidden="true"]': fake({ text: "Théo Gouman" }),
+        ".update-components-update-v2__commentary": [
+          fake({ text: "Le vrai sujet, c'est le coût…voir plus" }),
+        ],
+        ".update-components-image": fake(),
+      },
+    });
+
+    expect(LR.extractPost(post)).toEqual({
+      id: "123456789",
+      url: "https://www.linkedin.com/feed/update/urn:li:activity:123456789/",
+      authorName: "Théo Gouman",
+      body: "Le vrai sujet, c'est le coût",
+      media: "image",
+    });
+  });
+
+  it("étiquette le contenu repartagé plutôt que de le coller au texte de surface", () => {
+    const post = fake({
+      attrs: {},
+      selectors: {
+        ".update-components-update-v2__commentary": [
+          fake({ text: "Tout est dit ici." }),
+          fake({ text: "Le billet original." }),
+        ],
+      },
+    });
+    const extracted = LR.extractPost(post);
+    expect(extracted.body).toBe("Tout est dit ici.\n\n[Publication repartagée]\nLe billet original.");
+    expect(extracted.id).toBeNull();
+    expect(extracted.authorName).toBeNull();
+  });
+
+  it("ne répète pas un texte déjà contenu dans un nœud parent", () => {
+    const post = fake({
+      selectors: {
+        ".update-components-update-v2__commentary": [
+          fake({ text: "Un texte complet et son écho." }),
+          fake({ text: "son écho." }),
+        ],
+      },
+    });
+    expect(LR.extractPost(post).body).toBe("Un texte complet et son écho.");
+  });
+});
+
+describe("findPosts", () => {
+  it("écarte les publications imbriquées, qui n'ont pas de barre d'actions", () => {
+    const inner = fake();
+    const outer = fake({ children: [inner] });
+    const scope = {
+      querySelectorAll: (selector) =>
+        selector === '[data-urn^="urn:li:activity:"]' ? [outer, inner] : [],
+    };
+    expect(LR.findPosts(scope)).toEqual([outer]);
+  });
+
+  it("dédoublonne une publication attrapée par plusieurs sélecteurs", () => {
+    const post = fake();
+    const scope = { querySelectorAll: () => [post] };
+    expect(LR.findPosts(scope)).toEqual([post]);
+  });
+
+  it("rend une liste vide plutôt que de lever sans document", () => {
+    expect(LR.findPosts({})).toEqual([]);
+  });
+});

@@ -2,70 +2,18 @@
 /**
  * Génère les icônes PWA sans dépendance graphique.
  *
- * Un encodeur PNG tient en trente lignes avec zlib ; ajouter sharp ou canvas
- * pour trois carrés arrondis coûterait un binaire natif à installer sur
- * chaque machine et dans le CI.
+ * L'encodeur PNG vit dans `scripts/lib/png.mjs`, partagé avec les icônes de
+ * l'extension Chrome pour que les deux jeux ne divergent pas.
  *
  * Marque : fond rouge Notion Club (#e0625a), trois barres blanches de largeur
  * décroissante — une file qui se vide, ce que fait l'app.
  */
-import { deflateSync } from "node:zlib";
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { encodePng, roundedRectCoverage } from "./lib/png.mjs";
 
 const BRAND = [224, 98, 90];
 const WHITE = [255, 255, 255];
-
-function crc32(buffer) {
-  let c;
-  const table = [];
-  for (let n = 0; n < 256; n += 1) {
-    c = n;
-    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[n] = c >>> 0;
-  }
-  let crc = 0xffffffff;
-  for (const byte of buffer) crc = table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function chunk(type, data) {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([length, body, crc]);
-}
-
-function encodePng(width, height, pixels) {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8; // profondeur
-  ihdr[9] = 6; // RGBA
-  const raw = Buffer.alloc((width * 4 + 1) * height);
-  for (let y = 0; y < height; y += 1) {
-    raw[y * (width * 4 + 1)] = 0; // filtre None
-    pixels.copy(raw, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
-  }
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(raw, { level: 9 })),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-
-/** Distance signée à un rectangle arrondi — sert à antialiaser les bords. */
-function roundedRectCoverage(x, y, left, top, right, bottom, radius) {
-  const cx = Math.max(left + radius, Math.min(x, right - radius));
-  const cy = Math.max(top + radius, Math.min(y, bottom - radius));
-  const dx = x - cx;
-  const dy = y - cy;
-  const distance = Math.sqrt(dx * dx + dy * dy) - radius;
-  return Math.max(0, Math.min(1, 0.5 - distance));
-}
 
 function drawIcon(size, { maskable }) {
   const pixels = Buffer.alloc(size * size * 4);

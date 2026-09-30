@@ -18,6 +18,11 @@ const eslintConfig = [
       // et ses imports par URL. Les typer et les linter avec la config Next
       // n'apprendrait rien sur elles.
       "supabase/functions/**",
+      // Extension Chrome : scripts de contenu classiques (pas des modules),
+      // avec les globales `chrome.*` du runtime d'extension. Même raison que
+      // pour les fonctions Deno ci-dessus — la config Next n'apprendrait rien
+      // sur eux, et se tromperait sur leurs globales.
+      "extension/**",
     ],
   },
   ...nextCoreWebVitals,

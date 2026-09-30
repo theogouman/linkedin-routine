@@ -7,6 +7,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
+    // L'extension Chrome est du JavaScript simple, chargé tel quel par le
+    // navigateur : ses tests le sont aussi, sans passe de compilation.
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts", "extension/**/*.test.mjs"],
   },
 });

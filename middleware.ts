@@ -10,9 +10,10 @@ import {
  * Tout est privé par défaut : on liste ce qui est public plutôt que ce qui est
  * protégé, pour qu'une route ajoutée demain soit fermée sans qu'on y pense.
  *
- * Les routes `/api/cron/*` ne passent pas par le cookie — elles sont appelées
- * par l'ordonnanceur, sans navigateur — et portent leur propre secret partagé
- * vérifié dans le handler.
+ * Les routes `/api/cron/*` et `/api/extension/*` ne passent pas par le cookie —
+ * elles sont appelées sans navigateur, par l'ordonnanceur pour les premières et
+ * par le service worker de l'extension Chrome pour les secondes — et portent
+ * leur propre secret partagé, vérifié dans le handler.
  */
 
 const PUBLIC_PATHS = ["/login", "/manifest.webmanifest", "/sw.js", "/offline"];
@@ -20,7 +21,7 @@ const PUBLIC_PATHS = ["/login", "/manifest.webmanifest", "/sw.js", "/offline"];
 // Server Action), et un préfixe ouvert « au cas où » finit par accueillir une
 // route qu'on croyait protégée. La production est joignable publiquement — la
 // seule barrière est cette liste, elle ne contient donc que ce qui existe.
-const PUBLIC_PREFIXES = ["/_next/", "/icons/", "/api/cron/"];
+const PUBLIC_PREFIXES = ["/_next/", "/icons/", "/api/cron/", "/api/extension/"];
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;

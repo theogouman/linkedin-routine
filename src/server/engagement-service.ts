@@ -278,3 +278,73 @@ async function safeRecord(input: Parameters<typeof recordGeneration>[0]): Promis
     return null;
   }
 }
+
+// ── Génération sur un post lu ailleurs que dans le fil (extension Chrome) ───
+/**
+ * Même générateur, sans passage par la base.
+ *
+ * `generateVariants` ne consomme que quatre choses : le texte du post, le nom
+ * de l'auteur, la nature du visuel et l'intention. Rien de tout cela n'exige
+ * qu'une ligne existe dans `posts` — la recherche par identifiant n'était
+ * qu'un moyen d'obtenir le texte. Quand le texte vient d'ailleurs (le DOM de
+ * LinkedIn, lu par l'extension), on l'injecte directement et le reste du
+ * système — cerveau, corpus, cinq exemples, huit contrôles — ne voit aucune
+ * différence.
+ *
+ * Le journal, lui, enregistre `post_id = null` : la colonne est nullable et
+ * référence `posts` en `on delete set null`, elle accepte donc l'absence. Une
+ * génération hors fil reste mesurée comme les autres.
+ */
+export async function generateVariantsForRawPost(
+  input: {
+    postBody: string;
+    authorName: string | null;
+    /** `image`, `video`, `document`, `article`, ou n'importe quoi d'autre. */
+    media: string;
+  },
+  intention: Intention | null,
+  hooks?: GenerationHooks,
+): Promise<VariantsOutcome> {
+  const postBody = input.postBody.trim();
+  if (postBody === "") throw new Error("Le texte de la publication est vide.");
+
+  const result = await generateVariants({
+    mode: "commentaire",
+    postBody,
+    authorName: input.authorName,
+    visuel: describeMedia(input.media),
+    intention,
+  }, hooks);
+
+  const generationId = await safeRecord({
+    result,
+    intention,
+    postId: null,
+    commentId: null,
+  });
+  return { ...result, generationId };
+}
+
+/**
+ * Enregistre ce qui a été retenu d'une génération hors fil.
+ *
+ * L'extension ne publie rien elle-même : elle remplit le champ de commentaire
+ * de LinkedIn, et Théo appuie sur « Publier ». Ce que le journal mesure ici
+ * est donc le texte inséré, pas un envoi confirmé — la nuance est réelle, mais
+ * les quatre signaux qui comptent (variante retenue, retouche ou non, distance
+ * d'édition, registres choisis) restent exacts.
+ */
+export async function noteRawChoice(input: {
+  generationId: string;
+  slot: Slot;
+  publishedText: string;
+  lien: string | null;
+}): Promise<void> {
+  await recordChoice({
+    generationId: input.generationId,
+    slot: input.slot,
+    publishedText: input.publishedText,
+    mode: "commentaire",
+    lien: input.lien,
+  });
+}

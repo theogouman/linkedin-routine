@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Routine LinkedIn — réglages</title>
+    <style>
+      :root { color-scheme: light dark; --brand: #e0625a; }
+      body {
+        margin: 0; padding: 32px 24px; max-width: 560px;
+        font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .lede { margin: 0 0 24px; opacity: .65; font-size: 14px; }
+      label { display: block; font-weight: 600; font-size: 13px; margin: 18px 0 5px; }
+      .hint { font-weight: 400; opacity: .6; font-size: 12.5px; margin: 3px 0 0; }
+      input {
+        width: 100%; padding: 9px 11px; border-radius: 9px; font-size: 14px;
+        border: 1px solid rgba(128,128,128,.45); background: transparent; color: inherit;
+      }
+      input:focus { outline: 2px solid var(--brand); outline-offset: 1px; border-color: transparent; }
+      .row { display: flex; gap: 8px; margin-top: 22px; }
+      button {
+        border-radius: 9px; padding: 9px 16px; font-size: 14px; font-weight: 600;
+        cursor: pointer; border: 1px solid transparent;
+      }
+      .primary { background: var(--brand); color: #fff; }
+      .ghost { background: transparent; border-color: rgba(128,128,128,.45); color: inherit; }
+      button[disabled] { opacity: .5; cursor: default; }
+      #status { margin-top: 18px; font-size: 13.5px; min-height: 20px; }
+      #status.err { color: #c0392b; }
+      #status.ok { color: #1a7f4b; }
+      details { margin-top: 28px; font-size: 13px; opacity: .8; }
+      summary { cursor: pointer; font-weight: 600; }
+      code { font-size: 12.5px; background: rgba(128,128,128,.16); padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Routine LinkedIn</h1>
+    <p class="lede">
+      L'extension appelle ta propre app pour rédiger. Rien n'est publié : elle
+      remplit le champ de commentaire, tu relis et tu publies.
+    </p>
+
+    <label for="apiBase">Adresse de l'app</label>
+    <input id="apiBase" type="url" placeholder="https://mon-app.vercel.app" spellcheck="false" />
+    <p class="hint">Sans barre oblique finale. C'est l'URL où tourne l'app Next.js.</p>
+
+    <label for="token">Jeton d'accès</label>
+    <input id="token" type="password" placeholder="EXTENSION_TOKEN" spellcheck="false" />
+    <p class="hint">
+      La même valeur que la variable <code>EXTENSION_TOKEN</code> côté app. Ce
+      jeton n'ouvre que la génération — la clé Anthropic reste sur le serveur.
+    </p>
+
+    <div class="row">
+      <button id="save" class="primary" type="button">Enregistrer</button>
+      <button id="test" class="ghost" type="button">Tester la connexion</button>
+    </div>
+
+    <p id="status" role="status"></p>
+
+    <details>
+      <summary>Générer un jeton</summary>
+      <p>
+        Sur ta machine : <code>openssl rand -base64 32</code>. Colle la même
+        valeur ici et dans les variables d'environnement de l'app
+        (<code>EXTENSION_TOKEN</code>), puis redéploie.
+      </p>
+    </details>
+
+    <script src="options.js"></script>
+  </body>
+</html>

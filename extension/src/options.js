@@ -1,0 +1,84 @@
+/**
+ * Réglages de l'extension : adresse de l'app et jeton d'accès.
+ *
+ * La permission d'hôte est demandée ICI, au moment de l'enregistrement, et non
+ * déclarée d'avance dans le manifeste. L'adresse de l'app varie d'une
+ * installation à l'autre ; la seule façon de la déclarer statiquement serait
+ * de demander l'accès à tous les sites, ce qu'aucune extension ne devrait
+ * faire pour joindre un seul domaine.
+ */
+
+const $ = (id) => document.getElementById(id);
+const status = $("status");
+
+function say(message, kind) {
+  status.textContent = message;
+  status.className = kind || "";
+}
+
+function normalize(value) {
+  const trimmed = String(value || "").trim().replace(/\/+$/, "");
+  if (trimmed === "") return null;
+  try {
+    const url = new URL(trimmed);
+    // Le jeton part dans un en-tête : en clair sur `http`, il serait lisible
+    // par tout ce qui se trouve sur le chemin.
+    if (url.protocol !== "https:") return null;
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
+}
+
+async function load() {
+  const stored = await chrome.storage.sync.get(["apiBase", "token"]);
+  $("apiBase").value = stored.apiBase || "";
+  $("token").value = stored.token || "";
+}
+
+$("save").addEventListener("click", async () => {
+  const apiBase = normalize($("apiBase").value);
+  const token = $("token").value.trim();
+
+  if (apiBase === null) {
+    say("Adresse invalide — il faut une URL en https, par exemple https://mon-app.vercel.app.", "err");
+    return;
+  }
+  if (token.length < 24) {
+    say("Jeton trop court : au moins 24 caractères (openssl rand -base64 32).", "err");
+    return;
+  }
+
+  // La demande doit partir d'un geste de l'utilisateur : Chrome refuse
+  // silencieusement une demande de permission faite hors d'un clic.
+  let granted = true;
+  try {
+    granted = await chrome.permissions.request({ origins: [`${apiBase}/*`] });
+  } catch (error) {
+    say(`Permission refusée : ${error.message}`, "err");
+    return;
+  }
+  if (!granted) {
+    say("Sans l'autorisation d'accès à cette adresse, l'extension ne peut rien appeler.", "err");
+    return;
+  }
+
+  await chrome.storage.sync.set({ apiBase, token });
+  $("apiBase").value = apiBase;
+  say("Enregistré. Teste la connexion pour vérifier le jeton.", "ok");
+});
+
+$("test").addEventListener("click", async () => {
+  $("test").disabled = true;
+  say("Test en cours…");
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "ping" });
+    say(result.message, result.ok ? "ok" : "err");
+  } catch (error) {
+    say(`Le service worker n'a pas répondu (${error.message}).`, "err");
+  } finally {
+    $("test").disabled = false;
+  }
+});
+
+load();
