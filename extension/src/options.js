@@ -103,6 +103,19 @@ function renderDiagnostic(report) {
   }
 
   const age = Math.round((Date.now() - Date.parse(report.at)) / 1000);
+
+  // Un démarrage qui lève laisse la page muette : c'est la seule chose qui
+  // compte, elle passe donc avant tout le reste.
+  if (report.erreur) {
+    return [
+      `Le script a échoué au démarrage il y a ${age} s — ${report.url}`,
+      "",
+      report.erreur,
+      "",
+      "Envoie-moi ce texte : il nomme la ligne fautive.",
+    ].join("\n");
+  }
+
   const lines = [
     `Relevé il y a ${age} s — ${report.url}`,
     `Publications décorées : ${report.detected}`,

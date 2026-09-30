@@ -203,12 +203,6 @@
     }, 350);
   }
 
-  new MutationObserver(schedule).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
-  sweep();
-
   // ── Bouton flottant ───────────────────────────────────────────────────────
   /**
    * Le point d'entrée qui ne peut pas disparaître.
@@ -569,5 +563,42 @@
         },
       })
       .catch(() => {});
+  }
+
+  // ── Démarrage ─────────────────────────────────────────────────────────────
+  /**
+   * En DERNIER, et c'est une contrainte, pas une convention.
+   *
+   * Le premier passage touche à la moitié des déclarations du fichier — le
+   * bouton flottant, le compteur, l'horloge du relevé. Appelé plus haut, il les
+   * lit avant leur initialisation : `let` les laisse en zone morte, la lecture
+   * lève, et le script entier meurt avant d'avoir posé quoi que ce soit. La
+   * page reste alors parfaitement muette, sans le moindre indice.
+   */
+  function boot() {
+    new MutationObserver(schedule).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+    sweep();
+  }
+
+  try {
+    boot();
+  } catch (error) {
+    // Un échec au démarrage ne doit plus être silencieux : il part au relevé,
+    // que la page de réglages sait afficher.
+    try {
+      chrome.storage.local.set({
+        diagnostic: {
+          at: new Date().toISOString(),
+          url: location.href.split("?")[0],
+          erreur: String((error && error.stack) || error),
+        },
+      });
+    } catch {
+      // Contexte d'extension invalidé : il ne reste que la console.
+    }
+    throw error;
   }
 })();
