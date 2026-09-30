@@ -109,9 +109,20 @@ function renderDiagnostic(report) {
     `Boutons « Commenter » repérés : ${report.anchors}`,
     `Conteneurs reconnus : ${report.posts}`,
     `Cibles retenues : ${report.targets}`,
-    "",
-    "Détail par sélecteur :",
   ];
+
+  const sample = report.echantillon;
+  if (sample) {
+    lines.push(
+      "",
+      "Texte lu sur la première publication :",
+      `  source : ${sample.source} · auteur : ${sample.auteur || "—"} · média : ${sample.media || "—"}`,
+      `  ${sample.longueur} caractères`,
+      sample.debut ? `  « ${sample.debut} »` : "  (rien)",
+    );
+  }
+
+  lines.push("", "Détail par sélecteur :");
   for (const [selector, count] of Object.entries(report.counts || {})) {
     lines.push(`  ${count === 0 ? "·" : "✓"} ${String(count).padStart(4)}  ${selector}`);
   }

@@ -1,5 +1,6 @@
 /**
- * Le script de contenu : un bouton par publication, un panneau, une insertion.
+ * Le script de contenu : un bouton par publication, un bloc dans la carte,
+ * une insertion.
  *
  * Trois règles portées ici et nulle part ailleurs.
  *
@@ -31,23 +32,45 @@
     BARRE_SELECTORS,
   } = globalThis.LRExtract;
   const panel = globalThis.LRPanel;
-  /** Publication en cours dans le panneau, pour savoir où insérer. */
+
+  /** Publication ouverte dans le bloc, pour savoir où insérer. */
   let current = null;
   let generationId = null;
   let port = null;
 
-  // ── Bouton ────────────────────────────────────────────────────────────────
-  const BUTTON_CSS = `
+  // ── Styles posés dans la page ─────────────────────────────────────────────
+  /*
+   * Le bloc `card resize` de transitions.dev (`01-card-resize.md`), à une
+   * différence près : ses deux variables sont posées sur `.lr-slot` au lieu de
+   * `:root`. On écrit dans le document de LinkedIn — y déclarer des variables
+   * globales, c'est risquer d'en écraser une des leurs.
+   */
+  const STYLES = `
     .lr-trigger.lr-trigger {
-      display: inline-flex; align-items: center; gap: 6px;
-      margin: 0 4px; padding: 6px 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin: 0 2px; padding: 6px; width: 32px; height: 32px;
       border: 0; border-radius: 8px; cursor: pointer;
       background: transparent; color: #e0625a;
-      font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     .lr-trigger.lr-trigger:hover { background: rgba(224,98,90,.12); }
     .lr-trigger.lr-trigger[disabled] { opacity: .5; cursor: default; }
-    .lr-trigger.lr-trigger svg { width: 16px; height: 16px; }
+    .lr-trigger.lr-trigger svg { width: 18px; height: 18px; }
+
+    .lr-slot.lr-slot {
+      --lr-resize-dur: 300ms;
+      --lr-resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+      display: block; overflow: hidden;
+    }
+    .lr-slot.t-resize {
+      transition:
+        width  var(--lr-resize-dur) var(--lr-resize-ease),
+        height var(--lr-resize-dur) var(--lr-resize-ease);
+      will-change: width, height;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lr-slot.t-resize { transition: none !important; }
+    }
+
     .lr-fab.lr-fab {
       position: fixed; left: 18px; bottom: 18px; z-index: 2147482000;
       width: 44px; height: 44px; border: 0; border-radius: 50%; cursor: pointer;
@@ -63,13 +86,20 @@
       font: 600 11px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       text-align: center; padding: 0 4px;
     }
+    .lr-toast.lr-toast {
+      position: fixed; left: 18px; bottom: 74px; z-index: 2147482000;
+      max-width: 340px; padding: 10px 13px; border-radius: 10px;
+      background: #1a1a1a; color: #fff;
+      font: 500 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      box-shadow: 0 8px 24px rgba(0,0,0,.3);
+    }
   `;
 
   function injectStyles() {
-    if (document.getElementById("lr-trigger-style")) return;
+    if (document.getElementById("lr-styles")) return;
     const style = document.createElement("style");
-    style.id = "lr-trigger-style";
-    style.textContent = BUTTON_CSS;
+    style.id = "lr-styles";
+    style.textContent = STYLES;
     (document.head || document.documentElement).appendChild(style);
   }
 
@@ -87,17 +117,20 @@
     return svg;
   }
 
-  function makeButton(post) {
+  // ── Bouton par publication ────────────────────────────────────────────────
+  function makeButton(post, anchor) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "lr-trigger";
     button.appendChild(sparkle());
-    button.appendChild(document.createTextNode("Proposer"));
+    // Icône seule : le libellé vit dans l'infobulle et le nom accessible, pas
+    // à l'écran — la barre d'actions de LinkedIn est déjà chargée.
+    button.title = "Proposer quatre commentaires";
     button.setAttribute("aria-label", "Proposer quatre commentaires");
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      start(post);
+      start(post, anchor);
     });
     return button;
   }
@@ -113,7 +146,7 @@
    */
   function decorate(post, anchor) {
     if (post.querySelector(".lr-trigger")) return;
-    const button = makeButton(post);
+    const button = makeButton(post, anchor);
 
     // Juste après « Commenter » quand on l'a : c'est le point d'insertion le
     // plus sûr, puisque c'est l'élément qui a servi à trouver la publication.
@@ -136,7 +169,7 @@
     post.appendChild(row);
   }
 
-  /** Publications repérées au dernier passage, pour le bouton flottant. */
+  /** Publications repérées au dernier passage, avec leur point d'insertion. */
   let targets = [];
 
   function sweep() {
@@ -158,14 +191,32 @@
     report(targets.length);
   }
 
+  // Le fil est virtualisé : les publications apparaissent au défilement. Un
+  // observateur groupé, et non un intervalle, pour ne rien faire quand rien ne
+  // bouge — c'est la majorité du temps.
+  let pending = 0;
+  function schedule() {
+    if (pending) return;
+    pending = setTimeout(() => {
+      pending = 0;
+      sweep();
+    }, 350);
+  }
+
+  new MutationObserver(schedule).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+  sweep();
+
   // ── Bouton flottant ───────────────────────────────────────────────────────
   /**
    * Le point d'entrée qui ne peut pas disparaître.
    *
    * Les boutons par publication dépendent du balisage de LinkedIn ; celui-ci ne
-   * dépend de rien. Sa seule présence répond déjà à la première question quand
-   * rien ne marche : le script tourne-t-il ? Et son compteur répond à la
-   * seconde : voit-il des publications ?
+   * dépend de rien. Sa présence répond à la première question quand rien ne
+   * marche — le script tourne-t-il ? — et son compteur à la seconde — voit-il
+   * des publications ?
    */
   let fab = null;
   let fabCount = null;
@@ -195,10 +246,10 @@
     const middle = window.innerHeight / 2;
     let best = null;
     let bestDistance = Infinity;
-    for (const { post } of targets) {
+    for (const target of targets) {
       let box;
       try {
-        box = post.getBoundingClientRect();
+        box = target.post.getBoundingClientRect();
       } catch {
         continue;
       }
@@ -206,7 +257,7 @@
       const distance = Math.abs(box.top + box.height / 2 - middle);
       if (distance < bestDistance) {
         bestDistance = distance;
-        best = post;
+        best = target;
       }
     }
     return best;
@@ -214,20 +265,31 @@
 
   function onFabClick() {
     sweep();
-    const post = mostVisible();
-    if (post) {
-      start(post);
+    const target = mostVisible();
+    if (target) {
+      start(target.post, target.anchor);
       return;
     }
     const releve = diagnose(document);
-    panel.show({ subtitle: "Aucune publication détectée sur cette page" });
-    panel.reset().status(
-      `Rien de reconnu ici. Repères : ${releve.anchors} bouton(s) « Commenter », ` +
-        `${releve.posts} conteneur(s). Place-toi sur le fil d'actualité, ` +
-        "recharge la page, puis regarde le diagnostic dans les réglages.",
-      true,
+    toast(
+      `Aucune publication reconnue ici (${releve.anchors} bouton « Commenter », ` +
+        `${releve.posts} conteneur). Place-toi sur le fil, recharge la page, ` +
+        "puis regarde le diagnostic dans les réglages.",
     );
-    panel.done();
+  }
+
+  // ── Message bref, quand il n'y a pas de carte où écrire ───────────────────
+  let toastTimer = 0;
+  function toast(message) {
+    let node = document.querySelector(".lr-toast");
+    if (!node) {
+      node = document.createElement("div");
+      node.className = "lr-toast";
+      document.body.appendChild(node);
+    }
+    node.textContent = message;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => node.remove(), 9000);
   }
 
   // ── Diagnostic ────────────────────────────────────────────────────────────
@@ -250,6 +312,10 @@
           at: new Date().toISOString(),
           url: location.href.split("?")[0],
           detected: count,
+          // Un échantillon de ce qui a RÉELLEMENT été lu sur la première
+          // publication. Sans lui, « pas assez de texte » ne se corrige qu'à
+          // l'aveugle : c'est précisément le relevé qui manquait.
+          echantillon: sample(),
           ...diagnose(document),
         },
       });
@@ -258,74 +324,70 @@
     }
   }
 
-  // Le fil est virtualisé : les publications apparaissent au défilement. Un
-  // observateur groupé, et non un intervalle, pour ne rien faire quand rien ne
-  // bouge — c'est la majorité du temps.
-  let pending = 0;
-  function schedule() {
-    if (pending) return;
-    pending = setTimeout(() => {
-      pending = 0;
-      sweep();
-    }, 350);
+  function sample() {
+    const target = targets[0];
+    if (!target) return null;
+    try {
+      const data = extractPost(target.post, target.anchor);
+      return {
+        source: data.source,
+        auteur: data.authorName,
+        media: data.media,
+        longueur: data.body.length,
+        debut: data.body.slice(0, 220),
+      };
+    } catch (error) {
+      return { erreur: String(error && error.message) };
+    }
   }
-
-  new MutationObserver(schedule).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
-  sweep();
 
   // ── Génération ────────────────────────────────────────────────────────────
-  function summarize(data) {
-    const who = data.authorName ? `${data.authorName} — ` : "";
-    const line = data.body.split("\n").find((part) => part.trim() !== "") || "publication sans texte";
-    return `${who}${line}`;
-  }
-
-  function start(post) {
-    const data = extractPost(post);
-    if (data.body.trim().length < 12) {
-      openPanelFor(post, data);
-      panel.reset().status(
-        "Pas assez de texte dans cette publication — déplie-la (« voir plus ») puis réessaie.",
-        true,
-      );
-      panel.done();
-      return;
-    }
-    openPanelFor(post, data);
-    generate(null);
-  }
-
-  function openPanelFor(post, data) {
-    current = { post, data };
+  function start(post, anchor) {
+    current = { post, anchor };
     panel.show({
-      subtitle: summarize(data),
-      onRegenerate: (intention) => generate(intention),
+      post,
+      anchor,
+      onRegenerate: (choix) => generate(choix),
       onInsert: ({ slot, text }) => insert(slot, text),
       onCopy: ({ slot, text }) => copy(slot, text),
       onClose: () => {
-        try {
-          port?.disconnect();
-        } catch {
-          // Déjà fermé.
-        }
-        port = null;
+        disconnect();
+        current = null;
       },
     });
+    generate(null);
   }
 
-  function generate(intention) {
-    if (!current) return;
-    generationId = null;
-    panel.loading();
-
+  function disconnect() {
     try {
       port?.disconnect();
     } catch {
       // Déjà fermé.
     }
+    port = null;
+  }
+
+  /**
+   * Le texte est relu À CHAQUE génération, jamais mémorisé.
+   *
+   * Un « voir plus » déplié entre deux essais change le texte disponible ;
+   * repartir du relevé initial renverrait le même extrait tronqué, ou pire, un
+   * corps vide que l'app refuse en 400. Relire coûte une lecture du DOM.
+   */
+  function generate(choix) {
+    if (!current) return;
+    const data = extractPost(current.post, current.anchor);
+    current.data = data;
+
+    if (data.body.trim().length < 12) {
+      panel.reset().status(explainEmpty(data), true);
+      panel.done();
+      return;
+    }
+
+    generationId = null;
+    panel.loading();
+    disconnect();
 
     // Le service worker porte l'appel : il a la permission d'hôte sur l'app et
     // n'est donc pas soumis à CORS, contrairement à ce script qui s'exécute
@@ -340,12 +402,26 @@
     port.postMessage({
       type: "generate",
       payload: {
-        postBody: current.data.body,
-        authorName: current.data.authorName,
-        media: current.data.media,
-        intention: intention ?? null,
+        postBody: data.body,
+        authorName: data.authorName,
+        media: data.media,
+        intention: choix ?? null,
       },
     });
+  }
+
+  /**
+   * Dit ce qui a été lu, et pas seulement que c'était trop court.
+   *
+   * « Pas assez de texte » sur une publication visiblement pleine de texte est
+   * une impasse : sans savoir CE QUI a été relevé, il n'y a rien à corriger.
+   */
+  function explainEmpty(data) {
+    const seen = data.body.trim();
+    if (seen === "") {
+      return "Aucun texte trouvé dans cette publication. Si elle en contient, envoie-moi le diagnostic (réglages de l'extension).";
+    }
+    return `Seulement « ${seen.slice(0, 60)} » a été relevé — trop court pour rédiger. Déplie « voir plus », puis régénère.`;
   }
 
   function onEvent(event) {
@@ -447,7 +523,7 @@
     let editor = first(post, EDITOR_SELECTORS);
 
     if (!editor) {
-      const open = first(post, COMMENT_BUTTON_SELECTORS);
+      const open = first(post, COMMENT_BUTTON_SELECTORS) || current.anchor;
       if (open) open.click();
       editor = await waitFor(() => first(post, EDITOR_SELECTORS), 4000);
     }
@@ -489,7 +565,7 @@
           generationId,
           slot,
           publishedText: text,
-          postUrl: current.data.url,
+          postUrl: current.data?.url ?? null,
         },
       })
       .catch(() => {});

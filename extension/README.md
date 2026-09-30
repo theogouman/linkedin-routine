@@ -74,14 +74,16 @@ publications détectées. Il agit sur celle qui est au centre de l'écran. Sa
 seule présence prouve que l'extension tourne ; son compteur, qu'elle voit
 quelque chose.
 
-Et un bouton **Proposer** dans la barre d'actions de chaque publication, juste
-à côté de « Commenter ». Un clic :
+Et une **icône** dans la barre d'actions de chaque publication, juste à côté de
+« Commenter ». Un clic :
 
 1. lit le texte de la publication dans la page (aucun scraping, aucun appel à
    LinkedIn — c'est ce qui est déjà affiché) ;
 2. l'envoie à ton app, qui rédige les quatre registres habituels ;
-3. les affiche au fur et à mesure qu'ils arrivent, dans un panneau en bas à
-   droite.
+3. les affiche au fur et à mesure qu'elles arrivent, **dans la carte de la
+   publication elle-même**, sous la barre d'actions — là où LinkedIn ouvrirait
+   son propre champ de commentaire. La carte grandit en douceur à chaque
+   proposition qui arrive (`card resize` de transitions.dev).
 
 Chaque proposition est **modifiable sur place** avant insertion. « Insérer »
 ouvre le champ de commentaire de LinkedIn et y écrit le texte ; « Copier » le
@@ -99,12 +101,16 @@ relancent une génération orientée. « Régénérer » en relance une à regis
 **Commence par le diagnostic.** Page de réglages → **Relire le diagnostic**. Il
 dit ce que le script voit réellement sur ton onglet LinkedIn : combien de
 boutons « Commenter » repérés, combien de conteneurs reconnus, et le compte de
-chaque sélecteur un par un. Un relevé vide veut dire que le script ne s'est
-jamais exécuté — recharge l'onglet.
+chaque sélecteur un par un, **et le texte réellement lu sur la première
+publication**. Un relevé vide veut dire que le script ne s'est jamais exécuté —
+recharge l'onglet.
 
 LinkedIn sert des noms de classes hachés qui changent sans préavis. La parade
 tient en deux stratégies jouées ensemble : les conteneurs par sélecteur, et le
-bouton « Commenter » par son libellé accessible. La seconde est la plus solide,
+bouton « Commenter » par son libellé accessible. Le texte suit la même logique :
+les sélecteurs d'abord, puis, si aucun ne répond, une recherche par la structure
+— le bloc de texte le plus long situé AU-DESSUS du bouton « Commenter », ce qui
+écarte mécaniquement les commentaires des autres, toujours en dessous. La seconde est la plus solide,
 parce que LinkedIn doit garder ce libellé pour les lecteurs d'écran. Tout est
 regroupé en tête de `src/extract.js`. Quand quelque chose lâche, c'est là et
 nulle part ailleurs.
@@ -115,7 +121,7 @@ nulle part ailleurs.
 | Bouton rond présent, compteur à 0 | ni les conteneurs ni les ancres ne répondent | `POST_SELECTORS`, `commentAnchors` |
 | Bouton rond présent, pas de bouton par post | l'insertion échoue | `decorate()` dans `src/content.js` |
 | Bouton mal placé | `BARRE_SELECTORS` ne trouve plus la barre d'actions | `src/extract.js` |
-| « Pas assez de texte » | `TEXT_SELECTORS` ne trouve plus le corps | `src/extract.js` |
+| « Aucun texte trouvé » | ni `TEXT_SELECTORS` ni la recherche structurelle | `src/extract.js`, et envoie le diagnostic |
 | « Champ de commentaire introuvable » | `EDITOR_SELECTORS` ou `COMMENT_BUTTON_SELECTORS` | `src/extract.js` |
 | Texte inséré mais « Publier » reste grisé | Quill n'a pas vu la saisie | `fill()` dans `src/content.js` |
 | « Jeton refusé » | `EXTENSION_TOKEN` diffère entre l'app et les réglages | les deux |

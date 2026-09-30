@@ -41,6 +41,8 @@
     ".update-components-text",
     ".feed-shared-update-v2__description",
     ".feed-shared-text",
+    '[data-view-name="feed-commentary"]',
+    '[data-view-name*="commentary"]',
   ];
 
   /**
@@ -166,6 +168,83 @@
     return "none";
   }
 
+  // ── Texte, quand aucun sélecteur ne répond ────────────────────────────────
+  /**
+   * Descend tant qu'un enfant unique porte l'essentiel du texte.
+   *
+   * Le bloc le plus long d'une publication englobe souvent l'entête auteur ET
+   * le corps. Resserrer sur l'enfant dominant écarte l'entête sans avoir à le
+   * reconnaître — ce qui est justement l'intérêt, puisqu'on est ici parce que
+   * plus aucun nom de classe ne répond.
+   */
+  function tighten(node) {
+    let current = node;
+    for (let depth = 0; depth < 12; depth += 1) {
+      const total = String(current.textContent || "").length;
+      if (total === 0) break;
+      let dominant = null;
+      for (const child of current.children || []) {
+        if (String(child.textContent || "").length >= total * 0.85) {
+          dominant = child;
+          break;
+        }
+      }
+      if (!dominant) break;
+      current = dominant;
+    }
+    return current;
+  }
+
+  /**
+   * Le corps de la publication, trouvé sans s'appuyer sur un seul nom de classe.
+   *
+   * Deux règles de structure, vraies quel que soit le balisage :
+   *
+   *  1. **Le texte d'une publication est AU-DESSUS du bouton « Commenter ».**
+   *     Les commentaires déjà chargés sont en dessous, et ils peuvent
+   *     largement dépasser le post en volume. C'est ce filtre de position qui
+   *     empêche de commenter les commentaires des autres.
+   *  2. **Un bloc qui contient une zone de saisie n'est pas du texte lu.**
+   *
+   * Parmi ce qui reste, le bloc le plus long, resserré sur son enfant dominant.
+   */
+  function densestTextBlock(post, anchor) {
+    let nodes;
+    try {
+      nodes = post.querySelectorAll("div, span, p, section, article");
+    } catch {
+      return null;
+    }
+
+    let best = null;
+    let bestLength = 0;
+    for (const node of nodes) {
+      if (anchor && typeof node.contains === "function" && node.contains(anchor)) continue;
+      // 4 = DOCUMENT_POSITION_FOLLOWING : l'ancre vient après ce nœud.
+      if (
+        anchor &&
+        typeof node.compareDocumentPosition === "function" &&
+        (node.compareDocumentPosition(anchor) & 4) === 0
+      ) {
+        continue;
+      }
+      if (
+        typeof node.querySelector === "function" &&
+        node.querySelector('[contenteditable="true"], textarea, form')
+      ) {
+        continue;
+      }
+      const length = String(node.textContent || "").trim().length;
+      if (length > bestLength) {
+        bestLength = length;
+        best = node;
+      }
+    }
+
+    if (best === null || bestLength < 40) return null;
+    return tighten(best);
+  }
+
   /**
    * Extraction complète d'une publication.
    *
@@ -174,7 +253,7 @@
    * souvent le contenu repartagé. Les deux sont donc transmis, étiquetés, pour
    * que le générateur sache lequel est de qui.
    */
-  function extractPost(post) {
+  function extractPost(post, anchor) {
     const id = activityId(post);
     const author = readText(first(post, AUTHOR_SELECTORS));
 
@@ -207,7 +286,18 @@
       body = `${unique[0]}\n\n[Publication repartagée]\n${unique.slice(1).join("\n\n")}`;
     }
 
+    // Aucun sélecteur n'a répondu : on cherche le texte par la structure.
+    let source = body === "" ? "aucune" : "selecteur";
+    if (body.length < 12) {
+      const fallback = readText(densestTextBlock(post, anchor));
+      if (fallback.length > body.length) {
+        body = fallback;
+        source = "structure";
+      }
+    }
+
     return {
+      source,
       id,
       url: postUrl(id),
       authorName: author === "" ? null : author,
@@ -380,6 +470,8 @@
     extractPost,
     findPosts,
     findTargets,
+    densestTextBlock,
+    tighten,
     commentAnchors,
     containerFor,
     diagnose,

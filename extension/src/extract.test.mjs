@@ -138,6 +138,7 @@ describe("extractPost", () => {
     });
 
     expect(LR.extractPost(post)).toEqual({
+      source: "selecteur",
       id: "123456789",
       url: "https://www.linkedin.com/feed/update/urn:li:activity:123456789/",
       authorName: "Théo Gouman",
@@ -319,5 +320,95 @@ describe("diagnose", () => {
 
   it("rend un relevé même sans document exploitable", () => {
     expect(LR.diagnose({})).toEqual({ counts: {}, anchors: 0, posts: 0, targets: 0 });
+  });
+});
+
+/**
+ * Nœud factice pour la recherche structurelle : elle interroge les
+ * descendants, compare les positions et descend par `children`.
+ */
+function node({ text = "", children = [], holdsEditor = false, index = 0 } = {}) {
+  const self = {
+    _index: index,
+    textContent: text || children.map((child) => child.textContent).join(""),
+    children,
+    contains: (other) => other === self || children.some((child) => child.contains?.(other)),
+    querySelector: () => (holdsEditor ? {} : null),
+    // 4 = DOCUMENT_POSITION_FOLLOWING : vrai quand l'autre vient après nous.
+    compareDocumentPosition: (other) => (other._index > self._index ? 4 : 2),
+  };
+  return self;
+}
+
+describe("densestTextBlock", () => {
+  function postWith(descendants) {
+    return { querySelectorAll: () => descendants };
+  }
+
+  it("préfère le bloc le plus long situé AVANT le bouton « Commenter »", () => {
+    const corps = node({ text: "x".repeat(300), index: 1 });
+    const commentaires = node({ text: "y".repeat(900), index: 9 });
+    const anchor = { _index: 5 };
+    expect(LR.densestTextBlock(postWith([corps, commentaires]), anchor)).toBe(corps);
+  });
+
+  it("écarte un bloc qui englobe une zone de saisie", () => {
+    const corps = node({ text: "x".repeat(300), index: 1 });
+    const boite = node({ text: "y".repeat(900), index: 2, holdsEditor: true });
+    const anchor = { _index: 5 };
+    expect(LR.densestTextBlock(postWith([corps, boite]), anchor)).toBe(corps);
+  });
+
+  it("écarte un ancêtre du bouton, qui est la barre d'actions ou la carte entière", () => {
+    const corps = node({ text: "x".repeat(300), index: 1 });
+    const anchor = { _index: 5 };
+    const carte = node({ text: "z".repeat(2000), index: 0, children: [] });
+    carte.contains = (other) => other === anchor;
+    expect(LR.densestTextBlock(postWith([carte, corps]), anchor)).toBe(corps);
+  });
+
+  it("rend null quand rien n'atteint la taille d'un vrai texte", () => {
+    const bribe = node({ text: "court", index: 1 });
+    expect(LR.densestTextBlock(postWith([bribe]), { _index: 5 })).toBeNull();
+  });
+
+  it("resserre sur l'enfant dominant, ce qui écarte l'entête auteur", () => {
+    const corps = node({ text: "x".repeat(400), index: 2 });
+    const entete = node({ text: "Théo Gouman · 2 j", index: 1 });
+    const bloc = node({ children: [entete, corps], index: 0 });
+    expect(LR.densestTextBlock(postWith([bloc]), { _index: 9 })).toBe(corps);
+  });
+
+  it("s'arrête quand aucun enfant ne porte l'essentiel du texte", () => {
+    const moitie = node({ text: "x".repeat(200), index: 1 });
+    const autre = node({ text: "y".repeat(200), index: 2 });
+    const bloc = node({ children: [moitie, autre], index: 0 });
+    expect(LR.tighten(bloc)).toBe(bloc);
+  });
+});
+
+describe("extractPost, repli structurel", () => {
+  it("bascule sur la structure quand aucun sélecteur ne rend de texte", () => {
+    const corps = node({ text: "Un vrai corps de publication, bien assez long.", index: 2 });
+    const anchor = { _index: 9 };
+    const post = {
+      getAttribute: () => null,
+      querySelector: () => null,
+      querySelectorAll: (selector) => (selector.includes("div") ? [corps] : []),
+    };
+    const extracted = LR.extractPost(post, anchor);
+    expect(extracted.source).toBe("structure");
+    expect(extracted.body).toBe("Un vrai corps de publication, bien assez long.");
+  });
+
+  it("dit `aucune` quand même la structure ne donne rien", () => {
+    const post = {
+      getAttribute: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+    };
+    const extracted = LR.extractPost(post, null);
+    expect(extracted.source).toBe("aucune");
+    expect(extracted.body).toBe("");
   });
 });
