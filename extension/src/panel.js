@@ -131,8 +131,13 @@
    *
    * On remontait auparavant jusqu'à l'enfant direct du conteneur : depuis que
    * la carte est trouvée par l'ancre, ce conteneur est plus large que le cadre
-   * blanc, et le bloc sortait dessous, détaché de la publication. La barre
-   * d'actions, elle, est à l'intérieur du cadre par construction.
+   * blanc, et le bloc sortait dessous, détaché de la publication.
+   *
+   * Se poser juste après la barre ne suffisait pas non plus : la barre vit dans
+   * un `flex` en ligne, et le bloc y entrait comme un élément de rangée — les
+   * icônes J'aime, Republier et Envoyer se dispersaient autour. D'où
+   * `insertionPointFor`, qui remonte hors des conteneurs en ligne avant de
+   * poser quoi que ce soit.
    */
   function mount(post, anchor) {
     host = document.createElement("div");
@@ -174,12 +179,13 @@
     shadow.appendChild(inner);
     refs = { body, status, again, chips };
 
-    place(post, anchor);
+    const point = place(post, anchor);
 
     // La hauteur ne peut être tweenée que depuis une valeur en pixels : on part
     // de 0, on force un recalcul, puis on pose la hauteur réelle.
     void host.offsetHeight;
     sync();
+    if (point) widen(post, point);
 
     if (typeof ResizeObserver === "function") {
       observer = new ResizeObserver(() => sync());
@@ -188,10 +194,10 @@
   }
 
   function place(post, anchor) {
-    const bar = anchor ? globalThis.LRExtract?.actionBarFor?.(anchor, post) : null;
-    if (bar && bar.parentElement) {
-      bar.parentElement.insertBefore(host, bar.nextSibling);
-      return;
+    const point = anchor ? globalThis.LRExtract?.insertionPointFor?.(anchor, post) : null;
+    if (point && point.parentElement) {
+      point.parentElement.insertBefore(host, point.nextSibling);
+      return point;
     }
     // Sans barre reconnue, juste après le plus haut ancêtre de l'ancre qui
     // reste dans la carte : toujours dans la publication, à défaut d'être à
@@ -201,10 +207,44 @@
       while (node.parentElement && node.parentElement !== post) node = node.parentElement;
       if (node.parentElement === post) {
         post.insertBefore(host, node.nextSibling);
-        return;
+        return node;
       }
     }
     post.appendChild(host);
+    return null;
+  }
+
+  /**
+   * Vérifie le placement par son résultat, et non par la structure.
+   *
+   * `insertionPointFor` lit le mode de disposition des ancêtres, ce qui couvre
+   * ce qu'on a vu ; mais il suffit d'un conteneur qui range ses enfants
+   * autrement pour que le bloc se retrouve à nouveau dans une rangée, étroit,
+   * à pousser les icônes autour de lui. La largeur, elle, ne se discute pas :
+   * un bloc qui n'occupe pas la publication n'est pas au bon endroit, quelle
+   * qu'en soit la raison. On remonte alors d'un cran, et on remesure.
+   */
+  function widen(post, point) {
+    let node = point;
+    for (let step = 0; step < 6 && node; step += 1) {
+      if (!tooNarrow(post)) return;
+      const parent = node.parentElement;
+      if (!parent || parent === post || !parent.parentElement) return;
+      node = parent;
+      node.parentElement.insertBefore(host, node.nextSibling);
+      sync();
+    }
+  }
+
+  function tooNarrow(post) {
+    try {
+      const mine = host.getBoundingClientRect().width;
+      const full = post.getBoundingClientRect().width;
+      // Une publication de largeur nulle n'est pas rendue : rien à conclure.
+      return full > 0 && mine < full * 0.6;
+    } catch {
+      return false;
+    }
   }
 
   /** Reporte la hauteur du contenu sur l'hôte, que la transition anime. */

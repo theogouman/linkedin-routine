@@ -273,6 +273,22 @@ describe("commentAnchors", () => {
     expect(LR.commentAnchors(scopeWith([notre, vrai]))).toEqual([vrai]);
   });
 
+  /**
+   * Le champ de saisie ouvert porte son propre bouton « Commenter », qui
+   * publie. Le relevé comptait neuf ancres pour huit publications, et la carte
+   * au champ ouvert n'était plus atteinte.
+   */
+  it("écarte le « Commenter » du champ de saisie, qui publie au lieu d'ouvrir", () => {
+    const publier = fakeButton({ label: "Commenter" });
+    const composeur = fake({ selectors: { '[contenteditable="true"]:not([data-lr])': fake() } });
+    chainOf(publier, [composeur, fake()]);
+
+    const ouvrir = fakeButton({ label: "Commenter" });
+    chainOf(ouvrir, [fake(), fake()]);
+
+    expect(LR.commentAnchors(scopeWith([publier, ouvrir]))).toEqual([ouvrir]);
+  });
+
   it("rend une liste vide plutôt que de lever sans document", () => {
     expect(LR.commentAnchors({})).toEqual([]);
   });
@@ -322,6 +338,62 @@ describe("actionBarFor", () => {
     const button = fakeButton({ label: "Commenter" });
     chainOf(button, [fake(), fake()]);
     expect(LR.actionBarFor(button, null)).toBeNull();
+  });
+});
+
+describe("insertionPointFor", () => {
+  /** Remplace `getComputedStyle` le temps d'un test. */
+  function withLayout(map, run) {
+    const previous = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = (element) => map.get(element) || { display: "block" };
+    try {
+      return run();
+    } finally {
+      globalThis.getComputedStyle = previous;
+    }
+  }
+
+  /**
+   * La panne de l'image : le bloc posé juste après la barre entrait dans le
+   * `flex` qui la porte, et les icônes se dispersaient autour de lui.
+   */
+  it("remonte hors des conteneurs qui rangent leurs enfants en ligne", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const barre = fake({ selectors: { "button:not([data-lr])": [button, fake(), fake()] } });
+    const rangee = fake();
+    const colonne = fake();
+    const carte = fake();
+    chainOf(button, [barre, rangee, colonne, carte]);
+    const layout = new Map([
+      [rangee, { display: "flex", flexDirection: "row" }],
+      [colonne, { display: "flex", flexDirection: "column" }],
+    ]);
+    expect(withLayout(layout, () => LR.insertionPointFor(button, carte))).toBe(rangee);
+  });
+
+  it("s'en tient à la barre quand son parent empile déjà verticalement", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const barre = fake({ selectors: { "button:not([data-lr])": [button, fake(), fake()] } });
+    const carte = fake();
+    chainOf(button, [barre, fake(), carte]);
+    expect(withLayout(new Map(), () => LR.insertionPointFor(button, carte))).toBe(barre);
+  });
+
+  it("ne sort jamais de la publication", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const barre = fake({ selectors: { "button:not([data-lr])": [button, fake(), fake()] } });
+    const carte = fake();
+    chainOf(button, [barre, carte]);
+    const layout = new Map([[carte, { display: "flex", flexDirection: "row" }]]);
+    expect(withLayout(layout, () => LR.insertionPointFor(button, carte))).toBe(barre);
+  });
+
+  it("sans moteur de style, se pose après la barre plutôt que de lever", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const barre = fake({ selectors: { "button:not([data-lr])": [button, fake(), fake()] } });
+    const carte = fake();
+    chainOf(button, [barre, carte]);
+    expect(LR.insertionPointFor(button, carte)).toBe(barre);
   });
 });
 

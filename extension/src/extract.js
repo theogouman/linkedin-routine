@@ -387,12 +387,40 @@
    * verbe : `^commenter\b` ne peut pas correspondre à « commentaires », et
    * `^comment\b` pas davantage.
    */
+  /**
+   * Le « Commenter » bleu du champ de saisie publie un commentaire ; il n'en
+   * ouvre pas un.
+   *
+   * Le confondre avec celui de la barre d'actions donne deux ancres pour une
+   * seule publication — le relevé le montrait, neuf ancres pour huit cartes —
+   * et comme la remontée s'arrête dès qu'un ancêtre porte une seconde ancre,
+   * elle s'arrêtait bien trop bas sur la carte dont le champ était ouvert.
+   * Celle-là rendait « introuvable ».
+   *
+   * Un bouton posé à quelques niveaux d'un champ de saisie appartient à ce
+   * champ : celui de la barre d'actions n'en a aucun autour de lui.
+   */
+  function insideComposer(button) {
+    let node = button;
+    for (let depth = 0; depth < 4 && node; depth += 1) {
+      node = node.parentElement;
+      if (!node) return false;
+      try {
+        if (node.querySelector('[contenteditable="true"]:not([data-lr])')) return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
   function commentAnchors(scope) {
     const document_ = scope || (typeof document !== "undefined" ? document : null);
     if (!document_ || typeof document_.querySelectorAll !== "function") return [];
     const found = [];
     for (const button of document_.querySelectorAll("button")) {
       if (button.hasAttribute?.("data-lr")) continue;
+      if (insideComposer(button)) continue;
       const label = String(
         button.getAttribute?.("aria-label") || button.textContent || "",
       )
@@ -501,6 +529,52 @@
       if (buttons.length >= 3) return node;
     }
     return null;
+  }
+
+  /**
+   * Un conteneur qui range ses enfants en ligne.
+   *
+   * Y glisser un bloc pleine largeur, c'est le faire entrer dans la rangée : la
+   * barre d'actions se réorganise autour de lui, les icônes partent où elles
+   * peuvent. Le bloc était bien dans la carte — il était au milieu d'un `flex`.
+   */
+  function isRowContainer(element) {
+    if (!element) return false;
+    let style;
+    try {
+      style = globalThis.getComputedStyle?.(element);
+    } catch {
+      return false;
+    }
+    if (!style) return false;
+    const display = String(style.display || "");
+    if (display === "flex" || display === "inline-flex") {
+      return !String(style.flexDirection || "row").startsWith("column");
+    }
+    return display === "grid" || display === "inline-grid";
+  }
+
+  /**
+   * Après quel élément poser le bloc des propositions.
+   *
+   * On part de la barre d'actions et on remonte tant que le parent range ses
+   * enfants en ligne. On s'arrête au premier conteneur qui empile
+   * verticalement : le bloc y prend toute la largeur, sous la barre, et rien
+   * d'autre ne bouge — la publication grandit, la page ne se réorganise pas.
+   *
+   * Aucun nom de classe là-dedans : la question posée au document est celle qui
+   * compte vraiment, « cet endroit accepte-t-il un bloc ? », et LinkedIn ne peut
+   * pas la renommer.
+   */
+  function insertionPointFor(anchor, post) {
+    let node = actionBarFor(anchor, post) || anchor;
+    for (let depth = 0; depth < 8; depth += 1) {
+      const parent = node.parentElement;
+      if (!parent || parent === post) break;
+      if (!isRowContainer(parent)) break;
+      node = parent;
+    }
+    return node;
   }
 
   /**
@@ -631,6 +705,9 @@
     signature,
     tighten,
     actionBarFor,
+    insertionPointFor,
+    isRowContainer,
+    insideComposer,
     commentAnchors,
     containerFor,
     diagnose,

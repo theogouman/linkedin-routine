@@ -145,6 +145,8 @@ qu'au clic, ce zéro-là est normal.
 | Le texte lu est le nom et le titre de l'auteur | la recherche structurelle a pris l'entête | `holdsAuthorHeader`, `pickDensest` |
 | Cibles retenues mais aucune icône | l'insertion échoue | `decorate()` dans `src/content.js` |
 | Le bloc s'ouvre sous la carte au lieu de dedans | la barre d'actions n'est plus reconnue | `actionBarFor` dans `src/extract.js` |
+| Les icônes de la barre se dispersent autour du bloc | le bloc a été posé dans un conteneur en ligne | `insertionPointFor`, puis `widen` dans `src/panel.js` |
+| Une publication de plus que de cibles | le « Commenter » du champ ouvert compte comme ancre | `insideComposer` dans `src/extract.js` |
 | « Insérer » relance une génération | un sélecteur attrape nos propres nœuds | l'exclusion `:not([data-lr])` |
 | Bouton mal placé | `BARRE_SELECTORS` ne trouve plus la barre d'actions | `src/extract.js` |
 | « Aucun texte trouvé » | ni `TEXT_SELECTORS` ni la recherche structurelle | `src/extract.js`, et envoie le diagnostic |
