@@ -67,15 +67,13 @@ Clique **Tester la connexion** : le nom du modèle utilisé doit s'afficher.
 
 ## Usage
 
-Sur `linkedin.com`, deux points d'entrée.
+Sur `linkedin.com`, un seul point d'entrée : une **icône** dans la barre
+d'actions de chaque publication, juste à côté de « Commenter ». L'extension ne
+vit que là — rien ne flotte par-dessus le fil. Le revers assumé : quand rien ne
+s'affiche, c'est le diagnostic des réglages qui dit si le script tourne, et non
+plus la présence d'un bouton.
 
-Un **bouton rond en bas à gauche**, toujours présent, avec le nombre de
-publications détectées. Il agit sur celle qui est au centre de l'écran. Sa
-seule présence prouve que l'extension tourne ; son compteur, qu'elle voit
-quelque chose.
-
-Et une **icône** dans la barre d'actions de chaque publication, juste à côté de
-« Commenter ». Un clic :
+Un clic :
 
 1. lit le texte de la publication dans la page (aucun scraping, aucun appel à
    LinkedIn — c'est ce qui est déjà affiché) ;
@@ -115,6 +113,14 @@ parce que LinkedIn doit garder ce libellé pour les lecteurs d'écran. Tout est
 regroupé en tête de `src/extract.js`. Quand quelque chose lâche, c'est là et
 nulle part ailleurs.
 
+**Tout ce que l'extension pose dans la page porte `data-lr`, et aucun de ses
+sélecteurs génériques ne doit pouvoir l'attraper.** Notre bouton s'annonce
+« Proposer quatre commentaires » : il répondait à `[aria-label*="omment"]`, et
+comme il est posé juste après « Commenter », il arrivait le premier dans l'ordre
+du document. « Insérer » cliquait donc dessus — une génération de plus au lieu
+du champ de commentaire, puis l'échec. C'est le genre de panne qui se lit comme
+deux bugs sans rapport et n'en fait qu'un.
+
 Deux lignes du relevé se lisent ensemble, et une seule des deux ne dit rien :
 **le nombre de boutons « Commenter » repérés et le nombre de cibles retenues**.
 Plusieurs boutons pour une seule cible, c'est la remontée vers la carte qui
@@ -133,11 +139,13 @@ qu'au clic, ce zéro-là est normal.
 
 | Symptôme | Cause probable | Où regarder |
 |---|---|---|
-| Rien du tout, pas même le bouton rond | le script de contenu ne tourne pas | recharge l'onglet LinkedIn |
-| Bouton rond présent, compteur à 0 | ni les conteneurs ni les ancres ne répondent | `POST_SELECTORS`, `commentAnchors` |
+| Aucune icône, et un relevé vide | le script de contenu ne tourne pas | recharge l'onglet LinkedIn |
+| Relevé présent, 0 cible retenue | ni les conteneurs ni les ancres ne répondent | `POST_SELECTORS`, `commentAnchors` |
 | Plusieurs « Commenter » repérés, une seule cible | la remontée dépasse la carte | `containerFor` dans `src/extract.js` |
 | Le texte lu est le nom et le titre de l'auteur | la recherche structurelle a pris l'entête | `holdsAuthorHeader`, `pickDensest` |
-| Bouton rond présent, pas de bouton par post | l'insertion échoue | `decorate()` dans `src/content.js` |
+| Cibles retenues mais aucune icône | l'insertion échoue | `decorate()` dans `src/content.js` |
+| Le bloc s'ouvre sous la carte au lieu de dedans | la barre d'actions n'est plus reconnue | `actionBarFor` dans `src/extract.js` |
+| « Insérer » relance une génération | un sélecteur attrape nos propres nœuds | l'exclusion `:not([data-lr])` |
 | Bouton mal placé | `BARRE_SELECTORS` ne trouve plus la barre d'actions | `src/extract.js` |
 | « Aucun texte trouvé » | ni `TEXT_SELECTORS` ni la recherche structurelle | `src/extract.js`, et envoie le diagnostic |
 | « Champ de commentaire introuvable » | `EDITOR_SELECTORS` ou `COMMENT_BUTTON_SELECTORS` | `src/extract.js` |

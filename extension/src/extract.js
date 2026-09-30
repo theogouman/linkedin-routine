@@ -57,22 +57,42 @@
     ["image", [".update-components-image", ".feed-shared-image", ".update-components-linkedin-image"]],
   ];
 
-  /** Ce qui ouvre le champ de commentaire natif de LinkedIn. */
+  /**
+   * Ce qui ouvre le champ de commentaire natif de LinkedIn.
+   *
+   * Le `:not([data-lr])` n'est pas une précaution de style, c'est un correctif.
+   * Notre propre bouton porte « Proposer quatre commentaires » comme nom
+   * accessible : il répondait à `[aria-label*="omment"]`, et comme il est posé
+   * juste après « Commenter », il arrivait le premier dans l'ordre du document.
+   * « Insérer » cliquait donc sur NOTRE bouton — ce qui relançait une
+   * génération au lieu d'ouvrir le champ, puis échouait sur « champ de
+   * commentaire introuvable ». Tout ce que l'extension pose dans la page porte
+   * `data-lr` ; rien de ce qu'elle cherche ne doit le porter.
+   */
   const COMMENT_BUTTON_SELECTORS = [
-    "button.comment-button",
-    '.social-actions-button[aria-label*="ommentaire" i]',
-    'button[aria-label*="ommenter" i]',
-    'button[aria-label*="omment" i]',
-    '[data-view-name*="comment"] button',
+    "button.comment-button:not([data-lr])",
+    '.social-actions-button[aria-label*="ommentaire" i]:not([data-lr])',
+    'button[aria-label*="ommenter" i]:not([data-lr])',
+    'button[aria-label*="omment" i]:not([data-lr])',
+    '[data-view-name*="comment"] button:not([data-lr])',
   ];
 
-  /** Le champ de saisie lui-même — Quill, dans toutes les versions connues. */
+  /**
+   * Le champ de saisie lui-même.
+   *
+   * Quill (`.ql-editor`) dans les versions connues, mais le dernier de la liste
+   * ne suppose plus rien : un `contenteditable` à l'intérieur de la carte d'une
+   * publication est le champ de commentaire, quel que soit ce que LinkedIn met
+   * autour. Le composeur de publication du haut du fil n'est pas concerné — la
+   * recherche est toujours faite dans la carte, jamais dans le document.
+   */
   const EDITOR_SELECTORS = [
     '.comments-comment-box .ql-editor[contenteditable="true"]',
     '.comments-comment-texteditor .ql-editor[contenteditable="true"]',
     '.editor-content .ql-editor[contenteditable="true"]',
     'div.ql-editor[contenteditable="true"]',
-    '[role="textbox"][contenteditable="true"]',
+    '[role="textbox"][contenteditable="true"]:not([data-lr])',
+    '[contenteditable="true"]:not([data-lr])',
   ];
 
   const BARRE_SELECTORS = [
@@ -372,6 +392,7 @@
     if (!document_ || typeof document_.querySelectorAll !== "function") return [];
     const found = [];
     for (const button of document_.querySelectorAll("button")) {
+      if (button.hasAttribute?.("data-lr")) continue;
       const label = String(
         button.getAttribute?.("aria-label") || button.textContent || "",
       )
@@ -449,6 +470,35 @@
     // et prendre le plus grand garantit qu'elle contient tout son texte.
     for (let index = chain.length - 1; index >= 0; index -= 1) {
       if (looksLikePost(chain[index])) return chain[index];
+    }
+    return null;
+  }
+
+  /**
+   * La barre d'actions qui porte « Commenter », trouvée sans nom de classe.
+   *
+   * Elle se reconnaît à ce qu'elle fait : réunir plusieurs boutons sur une
+   * ligne — J'aime, Commenter, Republier, Envoyer. Le premier ancêtre de
+   * l'ancre qui en contient au moins trois est donc la barre, et c'est le plus
+   * petit qui satisfait ce critère, jamais la carte entière.
+   *
+   * Ce repère sert à poser le bloc des propositions DANS la carte, sous la
+   * barre, là où LinkedIn ouvre son propre champ. Remonter jusqu'à l'enfant
+   * direct du conteneur, comme on le faisait, sortait du cadre blanc : le
+   * conteneur trouvé par l'ancre est plus large que la carte visible.
+   */
+  function actionBarFor(anchor, post) {
+    let node = anchor;
+    for (let depth = 0; depth < 8 && node; depth += 1) {
+      node = node.parentElement;
+      if (!node || node === post) break;
+      let buttons;
+      try {
+        buttons = node.querySelectorAll("button:not([data-lr])");
+      } catch {
+        continue;
+      }
+      if (buttons.length >= 3) return node;
     }
     return null;
   }
@@ -580,6 +630,7 @@
     looksLikePost,
     signature,
     tighten,
+    actionBarFor,
     commentAnchors,
     containerFor,
     diagnose,

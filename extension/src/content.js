@@ -46,15 +46,22 @@
    * globales, c'est risquer d'en écraser une des leurs.
    */
   const STYLES = `
+    /*
+     * L'icône est à 24px, la taille de celles de LinkedIn : plus petite, elle
+     * se lisait comme une décoration au milieu d'une barre d'actions, pas
+     * comme une action. Le fond rouge pâle est permanent et non réservé au
+     * survol — c'est ce qui distingue notre bouton des quatre autres sans
+     * ajouter de libellé dans une barre déjà chargée.
+     */
     .lr-trigger.lr-trigger {
       display: inline-flex; align-items: center; justify-content: center;
-      margin: 0 2px; padding: 6px; width: 32px; height: 32px;
+      margin: 0 4px; padding: 8px; width: 40px; height: 40px;
       border: 0; border-radius: 8px; cursor: pointer;
-      background: transparent; color: #e0625a;
+      background: rgba(224,98,90,.12); color: #e0625a;
     }
-    .lr-trigger.lr-trigger:hover { background: rgba(224,98,90,.12); }
+    .lr-trigger.lr-trigger:hover { background: rgba(224,98,90,.22); }
     .lr-trigger.lr-trigger[disabled] { opacity: .5; cursor: default; }
-    .lr-trigger.lr-trigger svg { width: 18px; height: 18px; }
+    .lr-trigger.lr-trigger svg { width: 24px; height: 24px; }
 
     .lr-slot.lr-slot {
       --lr-resize-dur: 300ms;
@@ -71,34 +78,13 @@
       .lr-slot.t-resize { transition: none !important; }
     }
 
-    .lr-fab.lr-fab {
-      position: fixed; left: 18px; bottom: 18px; z-index: 2147482000;
-      width: 44px; height: 44px; border: 0; border-radius: 50%; cursor: pointer;
-      background: #e0625a; color: #fff; padding: 0;
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 6px 20px rgba(0,0,0,.26);
-    }
-    .lr-fab.lr-fab:hover { background: #cf554d; }
-    .lr-fab.lr-fab svg { width: 22px; height: 22px; }
-    .lr-fab-count.lr-fab-count {
-      position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px;
-      border-radius: 9px; background: #1a1a1a; color: #fff;
-      font: 600 11px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      text-align: center; padding: 0 4px;
-    }
-    .lr-toast.lr-toast {
-      position: fixed; left: 18px; bottom: 74px; z-index: 2147482000;
-      max-width: 340px; padding: 10px 13px; border-radius: 10px;
-      background: #1a1a1a; color: #fff;
-      font: 500 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      box-shadow: 0 8px 24px rgba(0,0,0,.3);
-    }
   `;
 
   function injectStyles() {
     if (document.getElementById("lr-styles")) return;
     const style = document.createElement("style");
     style.id = "lr-styles";
+    style.setAttribute("data-lr", "styles");
     style.textContent = STYLES;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -127,6 +113,10 @@
     // à l'écran — la barre d'actions de LinkedIn est déjà chargée.
     button.title = "Proposer quatre commentaires";
     button.setAttribute("aria-label", "Proposer quatre commentaires");
+    // Tout ce que l'extension pose porte cette marque, et les sélecteurs qui
+    // cherchent le balisage de LinkedIn l'excluent. Sans elle, ce bouton
+    // répondait à `[aria-label*="omment"]` et « Insérer » se cliquait dessus.
+    button.setAttribute("data-lr", "trigger");
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -164,6 +154,7 @@
     // Sans rien de reconnu, on ajoute une ligne à la fin plutôt que de
     // renoncer : le bouton doit exister même si LinkedIn a tout renommé.
     const row = document.createElement("div");
+    row.setAttribute("data-lr", "row");
     row.style.cssText = "display:flex;justify-content:flex-end;padding:4px 12px 8px;";
     row.appendChild(button);
     post.appendChild(row);
@@ -174,7 +165,6 @@
 
   function sweep() {
     injectStyles();
-    mountFab();
     try {
       targets = findTargets(document);
     } catch {
@@ -187,7 +177,6 @@
         // Une publication au balisage inattendu ne doit pas arrêter les autres.
       }
     }
-    updateFab(targets.length);
     report(targets.length);
   }
 
@@ -201,89 +190,6 @@
       pending = 0;
       sweep();
     }, 350);
-  }
-
-  // ── Bouton flottant ───────────────────────────────────────────────────────
-  /**
-   * Le point d'entrée qui ne peut pas disparaître.
-   *
-   * Les boutons par publication dépendent du balisage de LinkedIn ; celui-ci ne
-   * dépend de rien. Sa présence répond à la première question quand rien ne
-   * marche — le script tourne-t-il ? — et son compteur à la seconde — voit-il
-   * des publications ?
-   */
-  let fab = null;
-  let fabCount = null;
-
-  function mountFab() {
-    if (fab && fab.isConnected) return;
-    fab = document.createElement("button");
-    fab.type = "button";
-    fab.className = "lr-fab";
-    fab.title = "Routine LinkedIn — proposer des commentaires";
-    fab.setAttribute("aria-label", "Routine LinkedIn");
-    fab.appendChild(sparkle());
-    fabCount = document.createElement("span");
-    fabCount.className = "lr-fab-count";
-    fabCount.textContent = "0";
-    fab.appendChild(fabCount);
-    fab.addEventListener("click", onFabClick);
-    document.body.appendChild(fab);
-  }
-
-  function updateFab(count) {
-    if (fabCount) fabCount.textContent = String(count);
-  }
-
-  /** La publication la plus proche du centre de l'écran. */
-  function mostVisible() {
-    const middle = window.innerHeight / 2;
-    let best = null;
-    let bestDistance = Infinity;
-    for (const target of targets) {
-      let box;
-      try {
-        box = target.post.getBoundingClientRect();
-      } catch {
-        continue;
-      }
-      if (box.height === 0) continue;
-      const distance = Math.abs(box.top + box.height / 2 - middle);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = target;
-      }
-    }
-    return best;
-  }
-
-  function onFabClick() {
-    sweep();
-    const target = mostVisible();
-    if (target) {
-      start(target.post, target.anchor);
-      return;
-    }
-    const releve = diagnose(document);
-    toast(
-      `Aucune publication reconnue ici (${releve.anchors} bouton « Commenter », ` +
-        `${releve.posts} conteneur). Place-toi sur le fil, recharge la page, ` +
-        "puis regarde le diagnostic dans les réglages.",
-    );
-  }
-
-  // ── Message bref, quand il n'y a pas de carte où écrire ───────────────────
-  let toastTimer = 0;
-  function toast(message) {
-    let node = document.querySelector(".lr-toast");
-    if (!node) {
-      node = document.createElement("div");
-      node.className = "lr-toast";
-      document.body.appendChild(node);
-    }
-    node.textContent = message;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => node.remove(), 9000);
   }
 
   // ── Diagnostic ────────────────────────────────────────────────────────────
@@ -511,15 +417,38 @@
     editor.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
+  /**
+   * Ouvre le champ de commentaire de LinkedIn s'il ne l'est pas déjà.
+   *
+   * L'ancre passe AVANT les sélecteurs : c'est le bouton « Commenter » qui a
+   * servi à trouver la publication, donc celui dont on est sûr. Les sélecteurs
+   * ne sont qu'un repli pour une carte trouvée sans ancre.
+   *
+   * Le test d'ouverture préalable n'est pas une optimisation : le bouton de
+   * LinkedIn est une bascule, et cliquer dessus alors que le champ est ouvert
+   * le referme.
+   */
+  async function openComposer(post, anchor) {
+    if (first(post, EDITOR_SELECTORS)) return true;
+    const trigger = anchor || first(post, COMMENT_BUTTON_SELECTORS);
+    if (!trigger) return false;
+    try {
+      trigger.click();
+    } catch {
+      return false;
+    }
+    return (await waitFor(() => first(post, EDITOR_SELECTORS), 4000)) !== null;
+  }
+
   async function insert(slot, text) {
     if (!current) return;
-    const { post } = current;
-    let editor = first(post, EDITOR_SELECTORS);
+    const { post, anchor } = current;
 
+    let editor = first(post, EDITOR_SELECTORS);
     if (!editor) {
-      const open = first(post, COMMENT_BUTTON_SELECTORS) || current.anchor;
-      if (open) open.click();
-      editor = await waitFor(() => first(post, EDITOR_SELECTORS), 4000);
+      panel.status("Ouverture du champ de commentaire…", false);
+      await openComposer(post, anchor);
+      editor = first(post, EDITOR_SELECTORS);
     }
 
     if (!editor) {
@@ -569,11 +498,12 @@
   /**
    * En DERNIER, et c'est une contrainte, pas une convention.
    *
-   * Le premier passage touche à la moitié des déclarations du fichier — le
-   * bouton flottant, le compteur, l'horloge du relevé. Appelé plus haut, il les
-   * lit avant leur initialisation : `let` les laisse en zone morte, la lecture
-   * lève, et le script entier meurt avant d'avoir posé quoi que ce soit. La
-   * page reste alors parfaitement muette, sans le moindre indice.
+   * Le premier passage touche à la moitié des déclarations du fichier — la
+   * liste des cibles, l'horloge du relevé. Appelé plus haut, il les lit avant
+   * leur initialisation : `let` les laisse en zone morte, la lecture lève, et
+   * le script entier meurt avant d'avoir posé quoi que ce soit. La page reste
+   * alors parfaitement muette, sans le moindre indice — et depuis que le
+   * bouton flottant n'existe plus, le relevé est le seul témoin qu'il tourne.
    */
   function boot() {
     new MutationObserver(schedule).observe(document.documentElement, {

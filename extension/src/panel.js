@@ -126,13 +126,20 @@
   /**
    * Où poser le bloc dans la publication.
    *
-   * Juste après l'élément de premier niveau qui contient « Commenter », donc
-   * sous la barre d'actions et au-dessus des commentaires — la place que
-   * LinkedIn réserve lui-même à la rédaction. Sans ancre connue, à la fin.
+   * Juste après la barre d'actions, donc DANS la carte et au-dessus des
+   * commentaires — la place que LinkedIn réserve lui-même à la rédaction.
+   *
+   * On remontait auparavant jusqu'à l'enfant direct du conteneur : depuis que
+   * la carte est trouvée par l'ancre, ce conteneur est plus large que le cadre
+   * blanc, et le bloc sortait dessous, détaché de la publication. La barre
+   * d'actions, elle, est à l'intérieur du cadre par construction.
    */
   function mount(post, anchor) {
     host = document.createElement("div");
     host.className = "lr-slot t-resize";
+    // Marque tout ce que l'extension pose : les sélecteurs qui cherchent le
+    // balisage de LinkedIn l'excluent, pour ne jamais se prendre pour lui.
+    host.setAttribute("data-lr", "slot");
     host.style.height = "0px";
     shadow = host.attachShadow({ mode: "open" });
     shadow.appendChild(el("style", { textContent: STYLES }));
@@ -167,16 +174,7 @@
     shadow.appendChild(inner);
     refs = { body, status, again, chips };
 
-    let placed = false;
-    if (anchor) {
-      let node = anchor;
-      while (node.parentElement && node.parentElement !== post) node = node.parentElement;
-      if (node.parentElement === post) {
-        post.insertBefore(host, node.nextSibling);
-        placed = true;
-      }
-    }
-    if (!placed) post.appendChild(host);
+    place(post, anchor);
 
     // La hauteur ne peut être tweenée que depuis une valeur en pixels : on part
     // de 0, on force un recalcul, puis on pose la hauteur réelle.
@@ -187,6 +185,26 @@
       observer = new ResizeObserver(() => sync());
       observer.observe(inner);
     }
+  }
+
+  function place(post, anchor) {
+    const bar = anchor ? globalThis.LRExtract?.actionBarFor?.(anchor, post) : null;
+    if (bar && bar.parentElement) {
+      bar.parentElement.insertBefore(host, bar.nextSibling);
+      return;
+    }
+    // Sans barre reconnue, juste après le plus haut ancêtre de l'ancre qui
+    // reste dans la carte : toujours dans la publication, à défaut d'être à
+    // l'endroit idéal.
+    if (anchor) {
+      let node = anchor;
+      while (node.parentElement && node.parentElement !== post) node = node.parentElement;
+      if (node.parentElement === post) {
+        post.insertBefore(host, node.nextSibling);
+        return;
+      }
+    }
+    post.appendChild(host);
   }
 
   /** Reporte la hauteur du contenu sur l'hôte, que la transition anime. */

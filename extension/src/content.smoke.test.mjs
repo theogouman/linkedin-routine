@@ -101,8 +101,10 @@ describe("démarrage du script de contenu", () => {
     expect(document.head.children.some((child) => child.id === "lr-styles")).toBe(true);
   });
 
-  it("pose le bouton flottant, seul point d'entrée qui ne dépend pas de LinkedIn", () => {
-    expect(document.body.children.some((child) => child.className === "lr-fab")).toBe(true);
+  it("ne pose plus rien en dehors des publications", () => {
+    // L'extension ne vit que dans la barre d'actions d'une publication : rien
+    // ne doit flotter par-dessus le fil.
+    expect(document.body.children).toEqual([]);
   });
 
   it("dépose un relevé, ce qui prouve que le premier passage est allé au bout", () => {

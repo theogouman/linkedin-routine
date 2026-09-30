@@ -216,7 +216,9 @@ describe("findPosts", () => {
 /** Bouton factice, avec un parent chaînable pour la remontée. */
 function fakeButton({ label = "", text = "", parent = null } = {}) {
   return {
+    tagName: "BUTTON",
     getAttribute: (name) => (name === "aria-label" ? label || null : null),
+    hasAttribute: () => false,
     textContent: text,
     parentElement: parent,
   };
@@ -233,11 +235,11 @@ function chainOf(button, levels) {
   return levels;
 }
 
-describe("commentAnchors", () => {
-  function scopeWith(buttons) {
-    return { querySelectorAll: (selector) => (selector === "button" ? buttons : []) };
-  }
+function scopeWith(buttons) {
+  return { querySelectorAll: (selector) => (selector === "button" ? buttons : []) };
+}
 
+describe("commentAnchors", () => {
   it("retient le bouton qui ouvre la rédaction, en français comme en anglais", () => {
     const fr = fakeButton({ label: "Commenter" });
     const en = fakeButton({ label: "Comment" });
@@ -257,8 +259,69 @@ describe("commentAnchors", () => {
     expect(LR.commentAnchors(scopeWith([button]))).toEqual([button]);
   });
 
+  /**
+   * Notre bouton s'annonce « Proposer quatre commentaires ». Il ne commence pas
+   * par le verbe, donc il ne passait pas ici — mais il passait dans
+   * `COMMENT_BUTTON_SELECTORS`, et « Insérer » se cliquait dessus. La marque
+   * `data-lr` ferme les deux portes d'un coup ; ce test tient la première.
+   */
+  it("ignore ce que l'extension a elle-même posé dans la page", () => {
+    const notre = fakeButton({ label: "Commenter" });
+    notre.hasAttribute = (name) => name === "data-lr";
+    const vrai = fakeButton({ label: "Commenter" });
+    vrai.hasAttribute = () => false;
+    expect(LR.commentAnchors(scopeWith([notre, vrai]))).toEqual([vrai]);
+  });
+
   it("rend une liste vide plutôt que de lever sans document", () => {
     expect(LR.commentAnchors({})).toEqual([]);
+  });
+});
+
+describe("sélecteurs génériques", () => {
+  /**
+   * Les sélecteurs nommés d'après LinkedIn (`ql-editor`, `comment-button`) ne
+   * peuvent pas attraper nos nœuds, qui ne portent pas ces noms. Les
+   * génériques, si — et c'est exactement ce qui est arrivé. Chacun doit donc
+   * porter l'exclusion.
+   */
+  it("excluent nos propres nœuds dès qu'ils ne nomment plus LinkedIn", () => {
+    const generiques = [...LR.COMMENT_BUTTON_SELECTORS, ...LR.EDITOR_SELECTORS].filter(
+      (selector) => /aria-label\*?=|contenteditable|role="textbox"/.test(selector),
+    );
+    expect(generiques.length).toBeGreaterThan(0);
+    for (const selector of generiques) {
+      if (selector.includes("ql-editor")) continue;
+      expect(selector).toContain(":not([data-lr])");
+    }
+  });
+});
+
+describe("actionBarFor", () => {
+  it("retient le plus petit ancêtre qui réunit plusieurs boutons", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const cellule = fake({ selectors: { "button:not([data-lr])": [button] } });
+    const barre = fake({
+      selectors: { "button:not([data-lr])": [button, fake(), fake(), fake()] },
+    });
+    const carte = fake({
+      selectors: { "button:not([data-lr])": [button, fake(), fake(), fake(), fake()] },
+    });
+    chainOf(button, [cellule, barre, carte]);
+    expect(LR.actionBarFor(button, carte)).toBe(barre);
+  });
+
+  it("s'arrête à la publication plutôt que de remonter au-delà", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const post = fake({ selectors: { "button:not([data-lr])": [button, fake(), fake()] } });
+    chainOf(button, [post]);
+    expect(LR.actionBarFor(button, post)).toBeNull();
+  });
+
+  it("rend null quand rien ne ressemble à une barre d'actions", () => {
+    const button = fakeButton({ label: "Commenter" });
+    chainOf(button, [fake(), fake()]);
+    expect(LR.actionBarFor(button, null)).toBeNull();
   });
 });
 
