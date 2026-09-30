@@ -11,3 +11,6 @@ npm-debug.log*
 next-env.d.ts
 *.tsbuildinfo
 coverage
+
+# Archive de l'extension Chrome, reconstruite à la demande.
+dist-extension.zip
