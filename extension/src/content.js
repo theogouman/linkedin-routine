@@ -21,11 +21,16 @@
 (function main() {
   "use strict";
 
-  const { extractPost, findPosts, first, EDITOR_SELECTORS, COMMENT_BUTTON_SELECTORS, BARRE_SELECTORS } =
-    globalThis.LRExtract;
+  const {
+    extractPost,
+    findTargets,
+    diagnose,
+    first,
+    EDITOR_SELECTORS,
+    COMMENT_BUTTON_SELECTORS,
+    BARRE_SELECTORS,
+  } = globalThis.LRExtract;
   const panel = globalThis.LRPanel;
-
-  const MARK = "data-lr-ready";
   /** Publication en cours dans le panneau, pour savoir où insérer. */
   let current = null;
   let generationId = null;
@@ -43,6 +48,21 @@
     .lr-trigger.lr-trigger:hover { background: rgba(224,98,90,.12); }
     .lr-trigger.lr-trigger[disabled] { opacity: .5; cursor: default; }
     .lr-trigger.lr-trigger svg { width: 16px; height: 16px; }
+    .lr-fab.lr-fab {
+      position: fixed; left: 18px; bottom: 18px; z-index: 2147482000;
+      width: 44px; height: 44px; border: 0; border-radius: 50%; cursor: pointer;
+      background: #e0625a; color: #fff; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,.26);
+    }
+    .lr-fab.lr-fab:hover { background: #cf554d; }
+    .lr-fab.lr-fab svg { width: 22px; height: 22px; }
+    .lr-fab-count.lr-fab-count {
+      position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px;
+      border-radius: 9px; background: #1a1a1a; color: #fff;
+      font: 600 11px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-align: center; padding: 0 4px;
+    }
   `;
 
   function injectStyles() {
@@ -82,31 +102,159 @@
     return button;
   }
 
-  function decorate(post) {
-    if (post.getAttribute(MARK) === "1") return;
-    post.setAttribute(MARK, "1");
-    const bar = first(post, BARRE_SELECTORS);
+  /**
+   * Pose le bouton, si la publication n'en a pas déjà un.
+   *
+   * La présence du bouton est vérifiée dans le DOM et non mémorisée dans un
+   * attribut : LinkedIn reconstruit ses barres d'actions à chaque réaction, ce
+   * qui emporte notre bouton. Un marqueur survivrait à cette reconstruction et
+   * empêcherait de le remettre — la publication resterait muette jusqu'au
+   * rechargement.
+   */
+  function decorate(post, anchor) {
+    if (post.querySelector(".lr-trigger")) return;
     const button = makeButton(post);
+
+    // Juste après « Commenter » quand on l'a : c'est le point d'insertion le
+    // plus sûr, puisque c'est l'élément qui a servi à trouver la publication.
+    if (anchor && anchor.parentElement) {
+      anchor.parentElement.insertBefore(button, anchor.nextSibling);
+      return;
+    }
+
+    const bar = first(post, BARRE_SELECTORS);
     if (bar) {
       bar.appendChild(button);
-    } else {
-      // Sans barre d'actions reconnue, on ajoute une ligne à la fin plutôt que
-      // de renoncer : le bouton doit exister même si LinkedIn a tout renommé.
-      const row = document.createElement("div");
-      row.style.cssText = "display:flex;justify-content:flex-end;padding:4px 12px 8px;";
-      row.appendChild(button);
-      post.appendChild(row);
+      return;
     }
+
+    // Sans rien de reconnu, on ajoute une ligne à la fin plutôt que de
+    // renoncer : le bouton doit exister même si LinkedIn a tout renommé.
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;justify-content:flex-end;padding:4px 12px 8px;";
+    row.appendChild(button);
+    post.appendChild(row);
   }
+
+  /** Publications repérées au dernier passage, pour le bouton flottant. */
+  let targets = [];
 
   function sweep() {
     injectStyles();
-    for (const post of findPosts(document)) {
+    mountFab();
+    try {
+      targets = findTargets(document);
+    } catch {
+      targets = [];
+    }
+    for (const { post, anchor } of targets) {
       try {
-        decorate(post);
+        decorate(post, anchor);
       } catch {
         // Une publication au balisage inattendu ne doit pas arrêter les autres.
       }
+    }
+    updateFab(targets.length);
+    report(targets.length);
+  }
+
+  // ── Bouton flottant ───────────────────────────────────────────────────────
+  /**
+   * Le point d'entrée qui ne peut pas disparaître.
+   *
+   * Les boutons par publication dépendent du balisage de LinkedIn ; celui-ci ne
+   * dépend de rien. Sa seule présence répond déjà à la première question quand
+   * rien ne marche : le script tourne-t-il ? Et son compteur répond à la
+   * seconde : voit-il des publications ?
+   */
+  let fab = null;
+  let fabCount = null;
+
+  function mountFab() {
+    if (fab && fab.isConnected) return;
+    fab = document.createElement("button");
+    fab.type = "button";
+    fab.className = "lr-fab";
+    fab.title = "Routine LinkedIn — proposer des commentaires";
+    fab.setAttribute("aria-label", "Routine LinkedIn");
+    fab.appendChild(sparkle());
+    fabCount = document.createElement("span");
+    fabCount.className = "lr-fab-count";
+    fabCount.textContent = "0";
+    fab.appendChild(fabCount);
+    fab.addEventListener("click", onFabClick);
+    document.body.appendChild(fab);
+  }
+
+  function updateFab(count) {
+    if (fabCount) fabCount.textContent = String(count);
+  }
+
+  /** La publication la plus proche du centre de l'écran. */
+  function mostVisible() {
+    const middle = window.innerHeight / 2;
+    let best = null;
+    let bestDistance = Infinity;
+    for (const { post } of targets) {
+      let box;
+      try {
+        box = post.getBoundingClientRect();
+      } catch {
+        continue;
+      }
+      if (box.height === 0) continue;
+      const distance = Math.abs(box.top + box.height / 2 - middle);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = post;
+      }
+    }
+    return best;
+  }
+
+  function onFabClick() {
+    sweep();
+    const post = mostVisible();
+    if (post) {
+      start(post);
+      return;
+    }
+    const releve = diagnose(document);
+    panel.show({ subtitle: "Aucune publication détectée sur cette page" });
+    panel.reset().status(
+      `Rien de reconnu ici. Repères : ${releve.anchors} bouton(s) « Commenter », ` +
+        `${releve.posts} conteneur(s). Place-toi sur le fil d'actualité, ` +
+        "recharge la page, puis regarde le diagnostic dans les réglages.",
+      true,
+    );
+    panel.done();
+  }
+
+  // ── Diagnostic ────────────────────────────────────────────────────────────
+  /**
+   * Relevé déposé dans le stockage local, relu par la page de réglages.
+   *
+   * Passer par le stockage plutôt que par `chrome.tabs.sendMessage` évite de
+   * demander la permission `tabs` : l'extension n'a besoin de voir aucun autre
+   * onglet, et une permission qu'on ne demande pas est une permission qu'on ne
+   * peut pas mal utiliser.
+   */
+  let lastReport = 0;
+  function report(count) {
+    const now = Date.now();
+    if (now - lastReport < 5000) return;
+    lastReport = now;
+    try {
+      chrome.storage.local.set({
+        diagnostic: {
+          at: new Date().toISOString(),
+          url: location.href.split("?")[0],
+          detected: count,
+          ...diagnose(document),
+        },
+      });
+    } catch {
+      // Le contexte de l'extension peut avoir été invalidé par un rechargement.
     }
   }
 

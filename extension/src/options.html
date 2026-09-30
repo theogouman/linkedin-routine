@@ -33,6 +33,13 @@
       details { margin-top: 28px; font-size: 13px; opacity: .8; }
       summary { cursor: pointer; font-weight: 600; }
       code { font-size: 12.5px; background: rgba(128,128,128,.16); padding: 1px 5px; border-radius: 4px; }
+      pre {
+        margin: 12px 0 0; padding: 12px; border-radius: 9px; font-size: 12px;
+        line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+        background: rgba(128,128,128,.12); max-height: 320px; overflow: auto;
+      }
+      pre:empty { display: none; }
+      h2 { font-weight: 650; }
     </style>
   </head>
   <body>
@@ -59,6 +66,17 @@
     </div>
 
     <p id="status" role="status"></p>
+
+    <h2 style="font-size: 15px; margin: 34px 0 6px">Diagnostic</h2>
+    <p class="hint" style="margin: 0 0 10px">
+      Ce que le script voit sur ton onglet LinkedIn. S'il n'y a rien ici, c'est
+      que le script ne s'est jamais exécuté : ouvre linkedin.com et recharge
+      l'onglet.
+    </p>
+    <div class="row" style="margin-top: 0">
+      <button id="diag" class="ghost" type="button">Relire le diagnostic</button>
+    </div>
+    <pre id="diagOut"></pre>
 
     <details>
       <summary>Générer un jeton</summary>

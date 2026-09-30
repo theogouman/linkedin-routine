@@ -47,6 +47,10 @@ node scripts/generate-extension-icons.mjs
 2. Active **Mode développeur** (en haut à droite)
 3. **Charger l'extension non empaquetée** → choisis le dossier `extension/`
 4. La page de réglages s'ouvre toute seule
+5. **Recharge tes onglets LinkedIn déjà ouverts.** Chrome n'injecte pas un
+   script de contenu dans les onglets ouverts avant l'installation : sans ce
+   rechargement, il ne se passera rien, et c'est la cause numéro un de
+   « aucun bouton n'apparaît ».
 
 ### 4. Réglages
 
@@ -63,8 +67,15 @@ Clique **Tester la connexion** : le nom du modèle utilisé doit s'afficher.
 
 ## Usage
 
-Sur `linkedin.com`, chaque publication porte un bouton **Proposer** dans sa
-barre d'actions. Un clic :
+Sur `linkedin.com`, deux points d'entrée.
+
+Un **bouton rond en bas à gauche**, toujours présent, avec le nombre de
+publications détectées. Il agit sur celle qui est au centre de l'écran. Sa
+seule présence prouve que l'extension tourne ; son compteur, qu'elle voit
+quelque chose.
+
+Et un bouton **Proposer** dans la barre d'actions de chaque publication, juste
+à côté de « Commenter ». Un clic :
 
 1. lit le texte de la publication dans la page (aucun scraping, aucun appel à
    LinkedIn — c'est ce qui est déjà affiché) ;
@@ -85,14 +96,24 @@ relancent une génération orientée. « Régénérer » en relance une à regis
 
 ## Quand ça casse
 
-LinkedIn sert des noms de classes hachés qui changent sans préavis. Les
-sélecteurs sont donc tous regroupés en tête de `src/extract.js`, en listes
-ordonnées du plus spécifique au plus général. Quand quelque chose lâche, c'est
-là et nulle part ailleurs.
+**Commence par le diagnostic.** Page de réglages → **Relire le diagnostic**. Il
+dit ce que le script voit réellement sur ton onglet LinkedIn : combien de
+boutons « Commenter » repérés, combien de conteneurs reconnus, et le compte de
+chaque sélecteur un par un. Un relevé vide veut dire que le script ne s'est
+jamais exécuté — recharge l'onglet.
+
+LinkedIn sert des noms de classes hachés qui changent sans préavis. La parade
+tient en deux stratégies jouées ensemble : les conteneurs par sélecteur, et le
+bouton « Commenter » par son libellé accessible. La seconde est la plus solide,
+parce que LinkedIn doit garder ce libellé pour les lecteurs d'écran. Tout est
+regroupé en tête de `src/extract.js`. Quand quelque chose lâche, c'est là et
+nulle part ailleurs.
 
 | Symptôme | Cause probable | Où regarder |
 |---|---|---|
-| Aucun bouton n'apparaît | `POST_SELECTORS` ne reconnaît plus les publications | `src/extract.js` |
+| Rien du tout, pas même le bouton rond | le script de contenu ne tourne pas | recharge l'onglet LinkedIn |
+| Bouton rond présent, compteur à 0 | ni les conteneurs ni les ancres ne répondent | `POST_SELECTORS`, `commentAnchors` |
+| Bouton rond présent, pas de bouton par post | l'insertion échoue | `decorate()` dans `src/content.js` |
 | Bouton mal placé | `BARRE_SELECTORS` ne trouve plus la barre d'actions | `src/extract.js` |
 | « Pas assez de texte » | `TEXT_SELECTORS` ne trouve plus le corps | `src/extract.js` |
 | « Champ de commentaire introuvable » | `EDITOR_SELECTORS` ou `COMMENT_BUTTON_SELECTORS` | `src/extract.js` |

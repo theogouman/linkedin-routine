@@ -82,3 +82,50 @@ $("test").addEventListener("click", async () => {
 });
 
 load();
+
+// ── Diagnostic ──────────────────────────────────────────────────────────────
+/**
+ * Relit ce que le script de contenu a déposé depuis l'onglet LinkedIn.
+ *
+ * Le relevé passe par le stockage plutôt que par un message direct à l'onglet :
+ * interroger un onglet demanderait la permission `tabs`, dont l'extension n'a
+ * aucun autre besoin.
+ */
+function renderDiagnostic(report) {
+  if (!report) {
+    return [
+      "Aucun relevé.",
+      "",
+      "Le script de contenu ne s'est pas exécuté. Deux causes, dans l'ordre :",
+      "  1. l'onglet LinkedIn était déjà ouvert à l'installation — recharge-le ;",
+      "  2. l'extension est désactivée ou en erreur — vois chrome://extensions.",
+    ].join("\n");
+  }
+
+  const age = Math.round((Date.now() - Date.parse(report.at)) / 1000);
+  const lines = [
+    `Relevé il y a ${age} s — ${report.url}`,
+    `Publications décorées : ${report.detected}`,
+    `Boutons « Commenter » repérés : ${report.anchors}`,
+    `Conteneurs reconnus : ${report.posts}`,
+    `Cibles retenues : ${report.targets}`,
+    "",
+    "Détail par sélecteur :",
+  ];
+  for (const [selector, count] of Object.entries(report.counts || {})) {
+    lines.push(`  ${count === 0 ? "·" : "✓"} ${String(count).padStart(4)}  ${selector}`);
+  }
+  if (report.anchors === 0 && report.posts === 0) {
+    lines.push(
+      "",
+      "Aucun repère trouvé : soit la page n'est pas un fil d'actualité, soit",
+      "LinkedIn a renommé son balisage. Envoie-moi ce relevé.",
+    );
+  }
+  return lines.join("\n");
+}
+
+$("diag").addEventListener("click", async () => {
+  const stored = await chrome.storage.local.get("diagnostic");
+  $("diagOut").textContent = renderDiagnostic(stored.diagnostic);
+});

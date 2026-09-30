@@ -236,6 +236,137 @@
     return all.filter((element) => !all.some((other) => other !== element && other.contains(element)));
   }
 
+  // ── Détection par ancre fonctionnelle ─────────────────────────────────────
+  /**
+   * Deuxième stratégie de détection, et la plus solide des deux.
+   *
+   * Les noms de classes de LinkedIn sont hachés et changent ; le bouton
+   * « Commenter », lui, doit rester annoncé aux lecteurs d'écran, sous un
+   * libellé que les utilisateurs lisent. C'est donc l'élément le plus stable de
+   * toute la publication — et accessoirement l'endroit exact où poser le nôtre.
+   *
+   * On écarte « 12 commentaires », qui ouvre le fil et ne commence pas par le
+   * verbe : `^commenter\b` ne peut pas correspondre à « commentaires », et
+   * `^comment\b` pas davantage.
+   */
+  function commentAnchors(scope) {
+    const document_ = scope || (typeof document !== "undefined" ? document : null);
+    if (!document_ || typeof document_.querySelectorAll !== "function") return [];
+    const found = [];
+    for (const button of document_.querySelectorAll("button")) {
+      const label = String(
+        button.getAttribute?.("aria-label") || button.textContent || "",
+      )
+        .trim()
+        .toLowerCase();
+      if (label === "") continue;
+      if (/^(?:commenter|comment)\b/.test(label) || /^(?:commenter|comment on)\s/.test(label)) {
+        found.push(button);
+      }
+    }
+    return found;
+  }
+
+  function hasActivityUrn(element) {
+    if (!element || typeof element.getAttribute !== "function") return false;
+    const value = `${element.getAttribute("data-urn") || ""} ${element.getAttribute("data-id") || ""}`;
+    return /urn:li:(?:activity|ugcPost|share):\d{6,}/.test(value);
+  }
+
+  /**
+   * Remonte du bouton vers la publication qui le contient.
+   *
+   * Trois critères, dans cet ordre de confiance : un identifiant d'activité,
+   * un conteneur explicitement reconnu, puis — à défaut — le premier ancêtre
+   * qui porte à la fois un lien de profil et assez de texte pour être un post.
+   * Le dernier critère ne suppose aucun nom de classe, ce qui est précisément
+   * son intérêt le jour où LinkedIn les renomme tous.
+   */
+  function containerFor(button) {
+    const chain = [];
+    let node = button;
+    for (let depth = 0; depth < 14 && node; depth += 1) {
+      node = node.parentElement;
+      if (!node) break;
+      chain.push(node);
+      if (hasActivityUrn(node)) return node;
+    }
+    for (const candidate of chain) {
+      if (matchesAny(candidate, ["article", "div.feed-shared-update-v2", "div.occludable-update"])) {
+        return candidate;
+      }
+    }
+    for (const candidate of chain) {
+      const hasProfileLink =
+        typeof candidate.querySelector === "function" &&
+        candidate.querySelector('a[href*="/in/"]') !== null;
+      if (hasProfileLink && String(candidate.textContent || "").length > 160) return candidate;
+    }
+    return null;
+  }
+
+  /**
+   * Les publications à décorer, avec le point d'insertion quand on le connaît.
+   *
+   * Les deux stratégies sont jouées, pas l'une OU l'autre : celle par conteneur
+   * trouve des publications dont le bouton « Commenter » n'est pas encore
+   * rendu, celle par ancre en trouve quand tous les noms de classes ont changé.
+   * La fusion se fait sur l'élément conteneur, donc sans doublon.
+   */
+  function findTargets(scope) {
+    const targets = new Map();
+    for (const post of findPosts(scope)) targets.set(post, null);
+    for (const anchor of commentAnchors(scope)) {
+      const post = containerFor(anchor);
+      if (!post) continue;
+      // Une ancre est un meilleur point d'insertion qu'une barre devinée :
+      // elle l'emporte sur une entrée déjà posée sans ancre.
+      if (!targets.has(post) || targets.get(post) === null) targets.set(post, anchor);
+    }
+    // Comme pour `findPosts`, seule la publication extérieure d'un repartage
+    // porte une barre d'actions.
+    const posts = [...targets.keys()];
+    const out = [];
+    for (const post of posts) {
+      const nested = posts.some(
+        (other) => other !== post && typeof other.contains === "function" && other.contains(post),
+      );
+      if (!nested) out.push({ post, anchor: targets.get(post) });
+    }
+    return out;
+  }
+
+  /**
+   * Compte ce que chaque sélecteur trouve réellement dans la page.
+   *
+   * Quand rien n'apparaît, la question n'est pas « pourquoi » mais « lequel a
+   * lâché ». Ce relevé y répond en un coup d'œil, sans avoir à ouvrir les
+   * outils de développement ni à me décrire ce qu'on voit.
+   */
+  function diagnose(scope) {
+    const document_ = scope || (typeof document !== "undefined" ? document : null);
+    const counts = {};
+    const count = (selector) => {
+      try {
+        return document_.querySelectorAll(selector).length;
+      } catch {
+        return -1;
+      }
+    };
+    if (document_ && typeof document_.querySelectorAll === "function") {
+      for (const selector of [...POST_SELECTORS, ...BARRE_SELECTORS, ...EDITOR_SELECTORS]) {
+        counts[selector] = count(selector);
+      }
+      counts["button (total)"] = count("button");
+    }
+    return {
+      counts,
+      anchors: commentAnchors(document_).length,
+      posts: findPosts(document_).length,
+      targets: findTargets(document_).length,
+    };
+  }
+
   root.LRExtract = {
     POST_SELECTORS,
     EDITOR_SELECTORS,
@@ -248,6 +379,10 @@
     detectMedia,
     extractPost,
     findPosts,
+    findTargets,
+    commentAnchors,
+    containerFor,
+    diagnose,
     first,
     matchesAny,
   };

@@ -196,3 +196,128 @@ describe("findPosts", () => {
     expect(LR.findPosts({})).toEqual([]);
   });
 });
+
+/** Bouton factice, avec un parent chaînable pour la remontée. */
+function fakeButton({ label = "", text = "", parent = null } = {}) {
+  return {
+    getAttribute: (name) => (name === "aria-label" ? label || null : null),
+    textContent: text,
+    parentElement: parent,
+  };
+}
+
+/** Chaîne d'ancêtres, du plus proche au plus lointain. */
+function chainOf(button, levels) {
+  let child = button;
+  for (const level of levels) {
+    child.parentElement = level;
+    level.parentElement = null;
+    child = level;
+  }
+  return levels;
+}
+
+describe("commentAnchors", () => {
+  function scopeWith(buttons) {
+    return { querySelectorAll: (selector) => (selector === "button" ? buttons : []) };
+  }
+
+  it("retient le bouton qui ouvre la rédaction, en français comme en anglais", () => {
+    const fr = fakeButton({ label: "Commenter" });
+    const en = fakeButton({ label: "Comment" });
+    const long = fakeButton({ label: "Commenter le post de Théo Gouman" });
+    expect(LR.commentAnchors(scopeWith([fr, en, long]))).toEqual([fr, en, long]);
+  });
+
+  it("écarte ce qui ouvre le fil des commentaires plutôt que la rédaction", () => {
+    const compteur = fakeButton({ text: "12 commentaires" });
+    const voir = fakeButton({ label: "Voir les commentaires" });
+    const jaime = fakeButton({ label: "J'aime" });
+    expect(LR.commentAnchors(scopeWith([compteur, voir, jaime]))).toEqual([]);
+  });
+
+  it("lit le texte du bouton quand il n'a pas de libellé accessible", () => {
+    const button = fakeButton({ text: "  Commenter  " });
+    expect(LR.commentAnchors(scopeWith([button]))).toEqual([button]);
+  });
+
+  it("rend une liste vide plutôt que de lever sans document", () => {
+    expect(LR.commentAnchors({})).toEqual([]);
+  });
+});
+
+describe("containerFor", () => {
+  it("s'arrête au premier ancêtre porteur d'un identifiant d'activité", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const bar = fake();
+    const post = fake({ attrs: { "data-urn": "urn:li:activity:123456789" } });
+    const page = fake();
+    chainOf(button, [bar, post, page]);
+    expect(LR.containerFor(button)).toBe(post);
+  });
+
+  it("retombe sur le lien de profil et la longueur du texte quand tout est renommé", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const bar = fake({ text: "court" });
+    const post = fake({
+      selectors: { 'a[href*="/in/"]': fake() },
+      text: "x".repeat(200),
+    });
+    chainOf(button, [bar, post]);
+    expect(LR.containerFor(button)).toBe(post);
+  });
+
+  it("rend null plutôt qu'un ancêtre arbitraire quand rien ne ressemble à un post", () => {
+    const button = fakeButton({ label: "Commenter" });
+    chainOf(button, [fake(), fake()]);
+    expect(LR.containerFor(button)).toBeNull();
+  });
+});
+
+describe("findTargets", () => {
+  it("garde l'ancre comme point d'insertion quand elle existe", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const post = fake({ attrs: { "data-urn": "urn:li:activity:123456789" } });
+    chainOf(button, [post]);
+    const scope = {
+      querySelectorAll: (selector) => {
+        if (selector === "button") return [button];
+        if (selector === '[data-urn^="urn:li:activity:"]') return [post];
+        return [];
+      },
+    };
+    expect(LR.findTargets(scope)).toEqual([{ post, anchor: button }]);
+  });
+
+  it("trouve la publication par l'ancre même si aucun conteneur n'est reconnu", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const post = fake({ attrs: { "data-id": "urn:li:activity:999999999" } });
+    chainOf(button, [post]);
+    const scope = { querySelectorAll: (selector) => (selector === "button" ? [button] : []) };
+    expect(LR.findTargets(scope)).toEqual([{ post, anchor: button }]);
+  });
+
+  it("écarte la publication imbriquée d'un repartage", () => {
+    const inner = fake();
+    const outer = fake({ children: [inner] });
+    const scope = {
+      querySelectorAll: (selector) =>
+        selector === '[data-urn^="urn:li:activity:"]' ? [outer, inner] : [],
+    };
+    expect(LR.findTargets(scope)).toEqual([{ post: outer, anchor: null }]);
+  });
+});
+
+describe("diagnose", () => {
+  it("compte les repères sans lever sur une page sans rien", () => {
+    const report = LR.diagnose({ querySelectorAll: () => [] });
+    expect(report.anchors).toBe(0);
+    expect(report.posts).toBe(0);
+    expect(report.targets).toBe(0);
+    expect(report.counts["button (total)"]).toBe(0);
+  });
+
+  it("rend un relevé même sans document exploitable", () => {
+    expect(LR.diagnose({})).toEqual({ counts: {}, anchors: 0, posts: 0, targets: 0 });
+  });
+});

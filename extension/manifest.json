@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Routine LinkedIn — commentaires",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Quatre propositions de commentaire dans ta voix, sur chaque publication LinkedIn. Rien n'est publié sans toi.",
   "permissions": ["storage"],
   "optional_host_permissions": ["https://*/*"],
