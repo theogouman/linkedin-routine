@@ -20,10 +20,12 @@ beforeAll(async () => {
  * teste est la logique autour : l'ORDRE des listes de sélecteurs, le
  * dédoublonnage, le traitement du repartage.
  */
-function fake({ selectors = {}, attrs = {}, text = null, children = [] } = {}) {
+function fake({ selectors = {}, attrs = {}, text = null, children = [], tag = "div", className = "" } = {}) {
   const node = {
     _selectors: selectors,
     _attrs: attrs,
+    tagName: String(tag).toUpperCase(),
+    className,
     innerText: text ?? undefined,
     textContent: text ?? "",
     children,
@@ -53,6 +55,19 @@ describe("cleanPostText", () => {
 
   it("ne mange pas des points de suspension au milieu", () => {
     expect(LR.cleanPostText("Alors là… franchement, bravo.")).toBe("Alors là… franchement, bravo.");
+  });
+
+  it("retire l'intitulé et le degré de relation posés pour les lecteurs d'écran", () => {
+    expect(
+      LR.cleanPostText("Post du fil d'actualité\n\nThéo Gouman\n\n• 1er\n\nLe vrai sujet."),
+    ).toBe("Théo Gouman\n\nLe vrai sujet.");
+    expect(LR.cleanPostText("Feed post\n\n• 3e+\n\nUn texte.")).toBe("Un texte.");
+  });
+
+  it("ne confond pas le degré de relation avec une puce de liste", () => {
+    expect(LR.cleanPostText("• 1er point : le coût\n• 2e point : le délai")).toBe(
+      "• 1er point : le coût\n• 2e point : le délai",
+    );
   });
 
   it("supprime le mot `hashtag` inséré pour les lecteurs d'écran", () => {
@@ -273,6 +288,43 @@ describe("containerFor", () => {
     chainOf(button, [fake(), fake()]);
     expect(LR.containerFor(button)).toBeNull();
   });
+
+  /**
+   * La régression du 30 septembre, en un test.
+   *
+   * Le fil satisfait le dernier critère — un lien de profil, beaucoup de texte
+   * — aussi bien qu'une publication. Sans borne, la remontée le rendait, il
+   * contenait les sept autres cartes, et `findTargets` n'en gardait qu'une.
+   */
+  it("s'arrête avant l'ancêtre qui contient un autre bouton « Commenter »", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const autre = fakeButton({ label: "Commenter" });
+    const carte = fake({
+      selectors: { 'a[href*="/in/"]': fake() },
+      text: "x".repeat(400),
+    });
+    const fil = fake({
+      selectors: { 'a[href*="/in/"]': fake() },
+      text: "x".repeat(4000),
+      children: [carte, autre],
+    });
+    chainOf(button, [carte, fil]);
+    expect(LR.containerFor(button, [button, autre])).toBe(carte);
+    // Sans la liste des ancres, rien ne borne la remontée : c'est l'ancien
+    // comportement, et il rendait le fil.
+    expect(LR.containerFor(button)).toBe(fil);
+  });
+
+  it("remonte assez profond : LinkedIn enfouit le bouton sous une quinzaine de niveaux", () => {
+    const button = fakeButton({ label: "Commenter" });
+    const niveaux = Array.from({ length: 17 }, () => fake({ text: "court" }));
+    const carte = fake({
+      selectors: { 'a[href*="/in/"]': fake() },
+      text: "x".repeat(400),
+    });
+    chainOf(button, [...niveaux, carte]);
+    expect(LR.containerFor(button, [button])).toBe(carte);
+  });
 });
 
 describe("findTargets", () => {
@@ -298,6 +350,61 @@ describe("findTargets", () => {
     expect(LR.findTargets(scope)).toEqual([{ post, anchor: button }]);
   });
 
+  /**
+   * Le relevé du 30 septembre, reproduit : huit boutons « Commenter », zéro
+   * conteneur reconnu, et une seule cible retenue au lieu de huit. C'est le
+   * test qui échouait avant la borne d'ascension, et le seul qui dise que le
+   * bouton se posera bien sur chaque publication.
+   */
+  it("rend une cible par publication quand tous les noms de classes ont changé", () => {
+    /** Arbre où `contains` descend vraiment, comme dans un vrai document. */
+    function branche({ text = "", children = [] }) {
+      const self = {
+        tagName: "DIV",
+        className: "",
+        children,
+        textContent: text || children.map((child) => child.textContent).join(""),
+        parentElement: null,
+        getAttribute: () => null,
+        matches: () => false,
+        querySelector: (selector) => (selector.includes("/in/") ? {} : null),
+        contains: (other) =>
+          other === self || children.some((child) => child.contains?.(other) ?? false),
+      };
+      for (const child of children) child.parentElement = self;
+      return self;
+    }
+
+    const boutons = [];
+    const cartes = [];
+    for (let index = 0; index < 8; index += 1) {
+      const bouton = {
+        tagName: "BUTTON",
+        getAttribute: (name) => (name === "aria-label" ? "Commenter" : null),
+        textContent: "",
+        parentElement: null,
+        contains: (other) => other === bouton,
+        children: [],
+      };
+      // Quinze niveaux entre le bouton et la carte, comme chez LinkedIn.
+      let sommet = bouton;
+      for (let depth = 0; depth < 15; depth += 1) sommet = branche({ children: [sommet] });
+      const carte = branche({ children: [branche({ text: "x".repeat(400) }), sommet] });
+      boutons.push(bouton);
+      cartes.push(carte);
+    }
+    const fil = branche({ children: cartes });
+
+    const scope = { querySelectorAll: (selector) => (selector === "button" ? boutons : []) };
+    const targets = LR.findTargets(scope);
+    expect(targets).toHaveLength(8);
+    expect(targets.map((target) => target.post)).toEqual(cartes);
+    expect(targets.map((target) => target.anchor)).toEqual(boutons);
+    // Le fil satisfait les mêmes critères qu'une carte : c'est lui qu'on
+    // rendait, et il avalait les sept autres.
+    expect(targets.some((target) => target.post === fil)).toBe(false);
+  });
+
   it("écarte la publication imbriquée d'un repartage", () => {
     const inner = fake();
     const outer = fake({ children: [inner] });
@@ -319,7 +426,13 @@ describe("diagnose", () => {
   });
 
   it("rend un relevé même sans document exploitable", () => {
-    expect(LR.diagnose({})).toEqual({ counts: {}, anchors: 0, posts: 0, targets: 0 });
+    expect(LR.diagnose({})).toEqual({
+      counts: {},
+      anchors: 0,
+      posts: 0,
+      targets: 0,
+      conteneurs: [],
+    });
   });
 });
 
@@ -340,11 +453,11 @@ function node({ text = "", children = [], holdsEditor = false, index = 0 } = {})
   return self;
 }
 
-describe("densestTextBlock", () => {
-  function postWith(descendants) {
-    return { querySelectorAll: () => descendants };
-  }
+function postWith(descendants) {
+  return { querySelectorAll: () => descendants };
+}
 
+describe("densestTextBlock", () => {
   it("préfère le bloc le plus long situé AVANT le bouton « Commenter »", () => {
     const corps = node({ text: "x".repeat(300), index: 1 });
     const commentaires = node({ text: "y".repeat(900), index: 9 });
@@ -377,6 +490,25 @@ describe("densestTextBlock", () => {
     const entete = node({ text: "Théo Gouman · 2 j", index: 1 });
     const bloc = node({ children: [entete, corps], index: 0 });
     expect(LR.densestTextBlock(postWith([bloc]), { _index: 9 })).toBe(corps);
+  });
+
+  /**
+   * L'autre moitié de la régression : la carte entière gagnait en longueur, et
+   * ce qui remontait était « Post du fil d'actualité / Jérôme Knops / CTO
+   * @Edenio… » au lieu du corps. L'avatar dans le lien de profil sépare
+   * l'entête du texte sans supposer aucun nom de classe.
+   */
+  it("écarte le bloc qui englobe l'entête auteur, reconnu à son avatar", () => {
+    const corps = node({ text: "Le corps, court mais c'est bien lui qu'on veut lire.", index: 3 });
+    const carte = node({ text: "y".repeat(900), index: 1 });
+    carte.querySelector = (selector) => (selector.includes("img") ? {} : null);
+    expect(LR.densestTextBlock(postWith([carte, corps]), { _index: 9 })).toBe(corps);
+  });
+
+  it("reprend la carte entière plutôt que rien quand elle est tout ce qu'il y a", () => {
+    const carte = node({ text: "z".repeat(300), index: 1 });
+    carte.querySelector = (selector) => (selector.includes("img") ? {} : null);
+    expect(LR.densestTextBlock(postWith([carte]), { _index: 9 })).toBe(carte);
   });
 
   it("s'arrête quand aucun enfant ne porte l'essentiel du texte", () => {

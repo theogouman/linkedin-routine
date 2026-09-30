@@ -125,6 +125,12 @@
       .replace(/\bhashtag\s*#/g, "#")
       .replace(/[ \t]+/g, " ")
       .replace(/ *\n */g, "\n")
+      // Le fil ouvre chaque carte par un intitulé destiné aux lecteurs
+      // d'écran, et annonce le degré de relation sur sa propre ligne. Les deux
+      // sont invisibles à l'écran mais bien présents dans `innerText`, donc
+      // dans le prompt : « Post du fil d'actualité » y passait pour du texte.
+      .replace(/^(?:post du fil d['\u2019]actualit\u00e9|publication du fil|feed post)\n*/i, "")
+      .replace(/^\u2022 ?(?:1er|2e|3e\+?|1st|2nd|3rd\+?|vous|you|suivi|following)(?:\n|$)/gim, "")
       .replace(/\n{3,}/g, "\n\n")
       .replace(/(?:…|\.\.\.)\s*(?:voir plus|afficher plus|see more|more)\s*$/i, "")
       .replace(/\s*(?:voir moins|see less)\s*$/i, "")
@@ -159,6 +165,17 @@
 
   function postUrl(id) {
     return id ? `https://www.linkedin.com/feed/update/urn:li:activity:${id}/` : null;
+  }
+
+  /**
+   * Reconnaît l'entête auteur sans s'appuyer sur un nom de classe.
+   *
+   * Un lien de profil qui porte une image, c'est l'avatar — et l'avatar est
+   * dans l'entête, jamais dans le corps. Une mention citée au fil du texte est
+   * un lien de profil, elle aussi, mais sans image : le critère les sépare.
+   */
+  function holdsAuthorHeader(node) {
+    return first(node, ['a[href*="/in/"] img', 'a[href*="/company/"] img']) !== null;
   }
 
   function detectMedia(post) {
@@ -209,6 +226,16 @@
    * Parmi ce qui reste, le bloc le plus long, resserré sur son enfant dominant.
    */
   function densestTextBlock(post, anchor) {
+    // Deux passes : la première écarte tout bloc qui englobe l'entête auteur,
+    // la seconde ne l'écarte plus. Sans la première, le bloc le plus long
+    // d'une publication brève — une vidéo, deux lignes de texte — est la carte
+    // entière, et ce qui remontait était le nom de l'auteur suivi de son
+    // titre. Sans la seconde, une carte dont le corps est indissociable de
+    // l'entête ne rendrait plus rien du tout.
+    return pickDensest(post, anchor, true) || pickDensest(post, anchor, false);
+  }
+
+  function pickDensest(post, anchor, avoidHeader) {
     let nodes;
     try {
       nodes = post.querySelectorAll("div, span, p, section, article");
@@ -234,6 +261,7 @@
       ) {
         continue;
       }
+      if (avoidHeader && holdsAuthorHeader(node)) continue;
       const length = String(node.textContent || "").trim().length;
       if (length > bestLength) {
         bestLength = length;
@@ -363,34 +391,64 @@
     return /urn:li:(?:activity|ugcPost|share):\d{6,}/.test(value);
   }
 
+  /** Noms qu'a portés la carte d'une publication, au fil des versions. */
+  const CONTAINER_HINTS = [
+    "article",
+    "div.feed-shared-update-v2",
+    "div.occludable-update",
+    "[data-finite-scroll-hook-item]",
+  ];
+
+  /** Un lien de profil et de quoi remplir une publication. */
+  function looksLikePost(element) {
+    if (first(element, ['a[href*="/in/"]', 'a[href*="/company/"]']) === null) return false;
+    return String((element && element.textContent) || "").length > 160;
+  }
+
   /**
    * Remonte du bouton vers la publication qui le contient.
    *
-   * Trois critères, dans cet ordre de confiance : un identifiant d'activité,
-   * un conteneur explicitement reconnu, puis — à défaut — le premier ancêtre
-   * qui porte à la fois un lien de profil et assez de texte pour être un post.
-   * Le dernier critère ne suppose aucun nom de classe, ce qui est précisément
-   * son intérêt le jour où LinkedIn les renomme tous.
+   * La contrainte qui tient tout le reste : **une publication porte exactement
+   * un bouton « Commenter »**. La remontée s'arrête donc dès qu'un ancêtre en
+   * contient un second — un tel ancêtre est le fil, ou un bloc de plusieurs
+   * cartes, jamais une carte.
+   *
+   * C'est ce garde-fou qui manquait, et son absence se lisait dans le relevé :
+   * huit boutons « Commenter » repérés, une seule cible retenue. Le dernier
+   * critère — un lien de profil et beaucoup de texte — est vrai du fil entier
+   * autant que d'une publication ; il rendait donc le fil, qui contenait les
+   * sept autres cartes, que le filtre d'imbrication écartait à leur tour. Une
+   * cible pour huit publications, et un bouton introuvable là où on le
+   * cherchait.
+   *
+   * La borne posée, la remontée peut être profonde sans danger — et elle doit
+   * l'être : LinkedIn enfouit ce bouton une quinzaine de niveaux sous la carte,
+   * parfois davantage. Quatorze n'y suffisaient plus.
    */
-  function containerFor(button) {
+  function containerFor(button, anchors) {
+    const others = Array.isArray(anchors) ? anchors.filter((other) => other !== button) : [];
     const chain = [];
     let node = button;
-    for (let depth = 0; depth < 14 && node; depth += 1) {
+    for (let depth = 0; depth < 24 && node; depth += 1) {
       node = node.parentElement;
       if (!node) break;
+      const tag = String(node.tagName || "").toUpperCase();
+      if (tag === "BODY" || tag === "HTML") break;
+      const swallowsAnother = others.some(
+        (other) => typeof node.contains === "function" && node.contains(other),
+      );
+      if (swallowsAnother) break;
       chain.push(node);
       if (hasActivityUrn(node)) return node;
     }
     for (const candidate of chain) {
-      if (matchesAny(candidate, ["article", "div.feed-shared-update-v2", "div.occludable-update"])) {
-        return candidate;
-      }
+      if (matchesAny(candidate, CONTAINER_HINTS)) return candidate;
     }
-    for (const candidate of chain) {
-      const hasProfileLink =
-        typeof candidate.querySelector === "function" &&
-        candidate.querySelector('a[href*="/in/"]') !== null;
-      if (hasProfileLink && String(candidate.textContent || "").length > 160) return candidate;
+    // Sans repère nommé, le plus GRAND ancêtre de la chaîne : il ne porte
+    // qu'un « Commenter », puisque le suivant en portait deux. C'est la carte,
+    // et prendre le plus grand garantit qu'elle contient tout son texte.
+    for (let index = chain.length - 1; index >= 0; index -= 1) {
+      if (looksLikePost(chain[index])) return chain[index];
     }
     return null;
   }
@@ -406,8 +464,11 @@
   function findTargets(scope) {
     const targets = new Map();
     for (const post of findPosts(scope)) targets.set(post, null);
-    for (const anchor of commentAnchors(scope)) {
-      const post = containerFor(anchor);
+    // La liste entière est transmise à chaque remontée : c'est elle qui borne
+    // l'ascension à la carte d'une seule publication.
+    const anchors = commentAnchors(scope);
+    for (const anchor of anchors) {
+      const post = containerFor(anchor, anchors);
       if (!post) continue;
       // Une ancre est un meilleur point d'insertion qu'une barre devinée :
       // elle l'emporte sur une entrée déjà posée sans ancre.
@@ -416,12 +477,24 @@
     // Comme pour `findPosts`, seule la publication extérieure d'un repartage
     // porte une barre d'actions.
     const posts = [...targets.keys()];
+    const holds = (parent, child) =>
+      parent !== child && typeof parent.contains === "function" && parent.contains(child);
     const out = [];
     for (const post of posts) {
-      const nested = posts.some(
-        (other) => other !== post && typeof other.contains === "function" && other.contains(post),
-      );
-      if (!nested) out.push({ post, anchor: targets.get(post) });
+      if (posts.some((other) => holds(other, post))) continue;
+      let anchor = targets.get(post);
+      if (!anchor) {
+        // La cible imbriquée qu'on vient d'écarter portait peut-être l'ancre.
+        // La remonter vaut mieux que de deviner une barre d'actions sur la
+        // publication gardée.
+        for (const other of posts) {
+          if (holds(post, other) && targets.get(other)) {
+            anchor = targets.get(other);
+            break;
+          }
+        }
+      }
+      out.push({ post, anchor: anchor ?? null });
     }
     return out;
   }
@@ -444,17 +517,49 @@
       }
     };
     if (document_ && typeof document_.querySelectorAll === "function") {
-      for (const selector of [...POST_SELECTORS, ...BARRE_SELECTORS, ...EDITOR_SELECTORS]) {
+      for (const selector of [
+        ...POST_SELECTORS,
+        ...BARRE_SELECTORS,
+        ...TEXT_SELECTORS,
+        ...AUTHOR_SELECTORS,
+        ...EDITOR_SELECTORS,
+      ]) {
         counts[selector] = count(selector);
       }
       counts["button (total)"] = count("button");
     }
+    const anchors = commentAnchors(document_);
     return {
       counts,
-      anchors: commentAnchors(document_).length,
+      anchors: anchors.length,
       posts: findPosts(document_).length,
       targets: findTargets(document_).length,
+      // La signature des cartes atteintes par l'ancre, et non par un nom de
+      // classe. Quand plus aucun sélecteur ne répond — c'est arrivé —, c'est
+      // la seule ligne du relevé qui dise comment LinkedIn nomme son balisage
+      // aujourd'hui. Sans elle, la mise à jour des sélecteurs se fait en
+      // devinant.
+      conteneurs: anchors.slice(0, 3).map((anchor) => signature(containerFor(anchor, anchors))),
     };
+  }
+
+  /** Description courte d'un élément, lisible dans le relevé. */
+  function signature(element) {
+    if (!element || typeof element.getAttribute !== "function") return "introuvable";
+    const tag = String(element.tagName || "?").toLowerCase();
+    const view = element.getAttribute("data-view-name");
+    const urn = element.getAttribute("data-urn") || element.getAttribute("data-id");
+    const raw = element.className;
+    const classes =
+      typeof raw === "string"
+        ? raw.trim().split(/\s+/).filter(Boolean).slice(0, 3).join(".")
+        : "";
+    return (
+      tag +
+      (view ? `[data-view-name="${view}"]` : "") +
+      (urn ? `[${urn}]` : "") +
+      (classes ? `.${classes}` : "")
+    );
   }
 
   root.LRExtract = {
@@ -471,6 +576,9 @@
     findPosts,
     findTargets,
     densestTextBlock,
+    holdsAuthorHeader,
+    looksLikePost,
+    signature,
     tighten,
     commentAnchors,
     containerFor,

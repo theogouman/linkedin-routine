@@ -115,10 +115,28 @@ parce que LinkedIn doit garder ce libellé pour les lecteurs d'écran. Tout est
 regroupé en tête de `src/extract.js`. Quand quelque chose lâche, c'est là et
 nulle part ailleurs.
 
+Deux lignes du relevé se lisent ensemble, et une seule des deux ne dit rien :
+**le nombre de boutons « Commenter » repérés et le nombre de cibles retenues**.
+Plusieurs boutons pour une seule cible, c'est la remontée vers la carte qui
+dépasse la publication et en avale les autres — pas la détection qui échoue.
+C'est exactement ce qui s'est produit le 30 septembre : huit boutons, une cible,
+et un bouton qui semblait ne plus s'afficher. Le garde-fou est dans
+`containerFor` : **une publication porte exactement un bouton « Commenter »**,
+donc l'ascension s'arrête dès qu'un ancêtre en contient deux.
+
+Le relevé imprime aussi la **signature des cartes atteintes par l'ancre** —
+balise, `data-view-name`, premières classes. C'est ce qui permet de mettre les
+sélecteurs à jour en lisant les nouveaux noms au lieu de les deviner, le jour où
+`POST_SELECTORS` retombe à zéro. Les sélecteurs de champ de saisie, eux, comptent
+0 tant qu'aucune boîte de commentaire n'est ouverte : LinkedIn ne rend le champ
+qu'au clic, ce zéro-là est normal.
+
 | Symptôme | Cause probable | Où regarder |
 |---|---|---|
 | Rien du tout, pas même le bouton rond | le script de contenu ne tourne pas | recharge l'onglet LinkedIn |
 | Bouton rond présent, compteur à 0 | ni les conteneurs ni les ancres ne répondent | `POST_SELECTORS`, `commentAnchors` |
+| Plusieurs « Commenter » repérés, une seule cible | la remontée dépasse la carte | `containerFor` dans `src/extract.js` |
+| Le texte lu est le nom et le titre de l'auteur | la recherche structurelle a pris l'entête | `holdsAuthorHeader`, `pickDensest` |
 | Bouton rond présent, pas de bouton par post | l'insertion échoue | `decorate()` dans `src/content.js` |
 | Bouton mal placé | `BARRE_SELECTORS` ne trouve plus la barre d'actions | `src/extract.js` |
 | « Aucun texte trouvé » | ni `TEXT_SELECTORS` ni la recherche structurelle | `src/extract.js`, et envoie le diagnostic |

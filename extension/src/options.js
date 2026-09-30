@@ -135,15 +135,37 @@ function renderDiagnostic(report) {
     );
   }
 
+  // Le balisage réellement rencontré, nommé. C'est ce qui manquait le jour où
+  // tous les sélecteurs sont tombés à zéro d'un coup : il fallait alors deviner
+  // les nouveaux noms au lieu de les lire.
+  const conteneurs = report.conteneurs || [];
+  if (conteneurs.length > 0) {
+    lines.push("", "Cartes atteintes par le bouton « Commenter » :");
+    for (const signature of conteneurs) lines.push(`  ${signature}`);
+  }
+
   lines.push("", "Détail par sélecteur :");
   for (const [selector, count] of Object.entries(report.counts || {})) {
     lines.push(`  ${count === 0 ? "·" : "✓"} ${String(count).padStart(4)}  ${selector}`);
   }
+  lines.push(
+    "",
+    "Les sélecteurs de champ de saisie (`ql-editor`, `role=textbox`) comptent 0",
+    "tant qu'aucune boîte de commentaire n'est ouverte : c'est normal, LinkedIn",
+    "ne rend le champ qu'au clic sur « Commenter ».",
+  );
   if (report.anchors === 0 && report.posts === 0) {
     lines.push(
       "",
       "Aucun repère trouvé : soit la page n'est pas un fil d'actualité, soit",
       "LinkedIn a renommé son balisage. Envoie-moi ce relevé.",
+    );
+  } else if (report.anchors >= 3 && report.targets <= 1) {
+    lines.push(
+      "",
+      `${report.anchors} boutons « Commenter » mais ${report.targets} cible : la remontée`,
+      "vers la carte s'arrête trop haut et une seule publication absorbe les",
+      "autres. Envoie-moi ce relevé avec les signatures ci-dessus.",
     );
   }
   return lines.join("\n");
